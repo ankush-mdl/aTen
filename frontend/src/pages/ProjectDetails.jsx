@@ -4,7 +4,9 @@ import { useParams, Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import "../assets/pages/ProjectDetail.css";
 import { getImageUrl } from "../lib/api";
-const API_BASE = process.env.NODE_ENV === "development" ? "http://localhost:5000" : "";
+
+// Backend base: use localhost backend in dev, else same-origin
+const BACKEND_BASE = (typeof window !== "undefined" && window.location && window.location.hostname === "localhost") ? "http://localhost:5000" : "";
 
 function safeParseJson(v, fallback = []) {
   if (!v && v !== "") return fallback;
@@ -28,7 +30,7 @@ export default function ProjectDetail() {
     const loadBySlug = async () => {
       try {
         // Try direct GET by slug first
-        const res = await fetch(`${API_BASE}/api/projects/${encodeURIComponent(slug)}`);
+        const res = await fetch(`${BACKEND_BASE}/api/projects/${encodeURIComponent(slug)}`);
         if (res.ok) {
           const data = await res.json();
           const p = data.project || data;
@@ -39,7 +41,7 @@ export default function ProjectDetail() {
         // If 404 (route exists but not found) or other, try fallback: fetch list and match by id or slug
         if (res.status === 404 || res.status === 400 || res.status === 500) {
           // fallback: fetch list
-          const listRes = await fetch(`${API_BASE}/api/projects`);
+          const listRes = await fetch(`${BACKEND_BASE}/api/projects`);
           if (!listRes.ok) {
             const txt = await listRes.text().catch(()=>"");
             throw new Error(`List fetch failed ${listRes.status} ${txt}`);
@@ -114,7 +116,6 @@ export default function ProjectDetail() {
       <div className="hero">
         <div className="hero-media">
           <img src={ getImageUrl((project.thumbnail) || "/placeholder.jpg") } alt={project.title} />
-
         </div>
         <div className="hero-meta">
           <h1>{project.title}</h1>
@@ -150,20 +151,20 @@ export default function ProjectDetail() {
 
   <h3>Configurations</h3>
   <div>
-    {(project.configurations||[]).map((c,i)=>(
+    {(project.configurations||[]).map((c,i)=>((
       <div key={i} className="config">
         <strong>{c.type}</strong> — {c.size_min || ""}{c.size_min && c.size_max ? ` - ${c.size_max}` : ""} sqft
         {c.price_min || c.price_max ? <div>Price: {c.price_min || "-"} - {c.price_max || "-"}</div> : null}
       </div>
-    ))}
+    )))}
   </div>
 </aside>
       </div>
 
       {project.gallery && project.gallery.length > 0 && (
         <div className="gallery">
-         {project.gallery && project.gallery.map((g,i) => <img key={i} src={ getImageUrl(g) } alt={`${project.title}-${i}`} />)}
-
+        {project.gallery && project.gallery.map((g,i) =>
+  <img key={i} src={ getImageUrl(g) } alt={`${project.title}-${i}`} />)}
         </div>
       )}
 

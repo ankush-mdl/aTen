@@ -3,12 +3,14 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import "../assets/pages/Project.css"; // your existing styles
-import { getImageUrl } from "../lib/api";
-// use absolute API base in development so dev server proxy won't break things
-const API_BASE = process.env.NODE_ENV === "development" ? "http://localhost:5000" : "";
+import { getImageUrl } from '../lib/api';
+
+// Backend base: use localhost backend in dev, else same-origin
+const BACKEND_BASE = (typeof window !== "undefined" && window.location && window.location.hostname === "localhost") ? "http://localhost:5000" : "";
+
 
 function safeParse(jsonOrString, fallback = []) {
-  if (!jsonOrString && jsonOrString !== "") return fallback;
+  if (jsonOrString === null || jsonOrString === undefined) return fallback;
   if (Array.isArray(jsonOrString)) return jsonOrString;
   try {
     return JSON.parse(jsonOrString);
@@ -40,7 +42,7 @@ export default function ProjectsList() {
       if (propertyType) params.set("property_type", propertyType);
       if (locationArea) params.set("location_area", locationArea);
       // configuration will be applied client-side because configurations are JSON arrays
-      const url = `${API_BASE}/api/projects?${params.toString()}`;
+      const url = `${BACKEND_BASE}/api/projects?${params.toString()}`;
       const res = await fetch(url);
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
@@ -163,7 +165,7 @@ export default function ProjectsList() {
             <article key={p.id} className="project-card">
               <Link to={`/projects/${p.slug}`} className="card-link">
                 <div className="card-media">
-                  <img src={ getImageUrl((p.thumbnail) || (p.gallery && p.gallery[0]) || "/placeholder.jpg") } alt={p.title} />
+                 <img src={ getImageUrl((p.thumbnail) || (p.gallery && p.gallery[0]) || "/placeholder.jpg") } alt={p.title} />
                 </div>
                 <div className="card-body">
                   <h3>{p.title}</h3>

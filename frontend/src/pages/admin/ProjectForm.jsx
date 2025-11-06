@@ -3,11 +3,9 @@ import React, { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import "../../assets/pages/admin/ProjectForm.css";
+import { getImageUrl } from "../../lib/api";
 
 const emptyConfig = () => ({ type: "3 BHK", size_min: "", size_max: "", price_min: "", price_max: "" });
-
-// dev base URL
-const API_BASE = process.env.NODE_ENV === "development" ? "http://localhost:5000" : "";
 
 function safeParseJson(v, fallback = []) {
   if (Array.isArray(v)) return v;
@@ -15,6 +13,11 @@ function safeParseJson(v, fallback = []) {
   try { return JSON.parse(v); } catch { return fallback; }
 }
 
+// Backend base: use localhost backend in dev, else same-origin
+const BACKEND_BASE = (typeof window !== "undefined" && window.location && window.location.hostname === "localhost") ? "http://localhost:5000" : "";
+
+
+// export default component
 export default function ProjectForm() {
   const { id } = useParams(); // "new" or numeric/id or slug
   const navigate = useNavigate();
@@ -57,7 +60,7 @@ export default function ProjectForm() {
       setLoading(true);
       try {
         // Primary attempt: GET /api/projects/:id  (some servers use slug here)
-        let res = await fetch(`${API_BASE}/api/projects/${encodeURIComponent(id)}`);
+        let res = await fetch(`${BACKEND_BASE}/api/projects/${encodeURIComponent(id)}`);
         if (res.ok) {
           const data = await res.json();
           const p = data.project || data;
@@ -67,7 +70,7 @@ export default function ProjectForm() {
         }
 
         // Fallback: list and find by numeric id or slug
-        const listRes = await fetch(`${API_BASE}/api/projects`);
+        const listRes = await fetch(`${BACKEND_BASE}/api/projects`);
         if (!listRes.ok) {
           toast.error("Failed to load project list");
           setLoading(false);
@@ -159,7 +162,7 @@ export default function ProjectForm() {
       for (const file of Array.from(files)) {
         const formData = new FormData();
         formData.append("file", file);
-        const res = await fetch(`${API_BASE}/api/uploads`, { method: "POST", body: formData });
+        const res = await fetch(`${BACKEND_BASE}/api/uploads`, { method: "POST", body: formData });
         if (!res.ok) {
           const txt = await res.text().catch(() => String(res.status));
           console.error("Upload failed", res.status, txt);
@@ -173,17 +176,17 @@ export default function ProjectForm() {
         else if (j.filename) uploadedUrls.push(`/uploads/${j.filename}`);
       }
 
-      if (uploadedUrls.length) {
-        setForm(s => {
-          const newGallery = [...s.gallery, ...uploadedUrls];
-          // if no thumbnail selected yet, pick the first newly uploaded or existing first
-          const thumbnail = s.thumbnail || newGallery[0] || "";
-          return { ...s, gallery: newGallery, thumbnail };
-        });
-        toast.success(`Uploaded ${uploadedUrls.length} image(s)`, { id: toastId });
-      } else {
-        toast.dismiss(toastId);
-      }
+     if (uploadedUrls.length) {
+  setForm(s => {
+    const newGallery = [...s.gallery, ...uploadedUrls];
+    // if no thumbnail selected yet, pick the first newly uploaded or existing first
+    const thumbnail = s.thumbnail || newGallery[0] || "";
+    return { ...s, gallery: newGallery, thumbnail };
+  });
+  toast.success(`Uploaded ${uploadedUrls.length} image(s)`, { id: toastId });
+} else {
+  toast.dismiss(toastId);
+}
       return uploadedUrls;
     } catch (err) {
       console.error("Upload error", err);
@@ -233,7 +236,7 @@ export default function ProjectForm() {
       };
 
       const method = id && id !== "new" ? "PUT" : "POST";
-      const url = id && id !== "new" ? `${API_BASE}/api/projects/${id}` : `${API_BASE}/api/projects`;
+      const url = id && id !== "new" ? `${BACKEND_BASE}/api/projects/${id}` : `${BACKEND_BASE}/api/projects`;
 
       const res = await fetch(url, {
         method,
@@ -405,7 +408,7 @@ export default function ProjectForm() {
             {form.gallery.map((g, i) => (
               <div key={i} className="gallery-item">
                 <div className="gallery-thumb-wrap">
-                  <img src={g} alt={`gallery-${i}`} />
+                  <img src={ getImageUrl(g) } alt={`gallery-${i}`} />
                   <div className="gallery-controls">
                     <label className="thumb-radio">
                       <input
