@@ -1,0 +1,233 @@
+/* Header — restyled to match Catalog (Cool Minimal) */
+
+/* Re-declare the same root tokens to ensure visual parity with the catalog */
+:root{
+  --bg: #D9D9D9;           /* very light cool background */
+  --card: #ffffff;
+  --accent: #262421;       /* slate-blue (primary accent) */
+  --accent-2: #403C34;     /* soft cyan for highlights */
+  --muted: #736B62;        /* muted slate for secondary text */
+  --glass: rgba(255,255,255,0.6);
+  --radius:18px;
+  --shadow-1: 0 8px 26px rgba(18,28,34,0.06);
+  --shadow-2: 0 14px 40px rgba(18,28,34,0.10);
+}
+
+/* Base navbar */
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 5rem;
+  padding: 0 28px;
+  background: linear-gradient(360deg, #262421, #35322b);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+/* Logo */
+.logo-header {
+  height: 52px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+  border-radius: 8px;
+  padding: 4px;
+  background: transparent;
+}
+
+/* Nav links container (desktop) */
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+/* Link style */
+.nav-links a {
+  display: flex;
+  align-items: center;justify-content: center;
+  color: #D9D9D9;
+  text-decoration: none;
+  font-weight: 600;
+  padding: 5px;
+  text-align: center;
+  border-radius: 10px;
+  transition: background 180ms ease, color 150ms ease, transform 120ms ease;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+}
+
+.nav-links a:hover {
+  color: white;
+  background: rgba(255,255,255,0.03);
+  transform: translateY(-2px);
+}
+
+/* Action buttons (Login / Browse / Logout) — pill style matching catalog */
+
+.login-btn,
+.logout-btn {
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+  color: #D9D9D9;
+  font-weight: 700;
+  cursor: pointer;
+  margin-left: 1rem;
+  transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+  box-shadow: 0 6px 18px rgba(47,75,90,0.06);
+}
+
+
+.login-btn:hover,
+.logout-btn:hover {
+  transform: translateY(-3px);
+  background: linear-gradient(90deg, rgba(106,166,201,0.06), rgba(47,75,90,0.02));
+}
+
+/* Auth area (desktop) */
+.auth {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Username */
+.user-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #D9D9D9;
+}
+
+.username {
+  font-weight: 700;
+  color: #D9D9D9;
+  font-size: 0.95rem;
+}
+
+/* Hamburger (mobile) */
+.hamburger {
+  display: none;
+  width: 32px;
+  height: 22px;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  z-index: 1100;
+  padding: 4px;
+  background: transparent;
+  border-radius: 6px;
+}
+.whatsapp{
+  height: 2.5rem;
+}
+.whatsapp-no{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+}
+.hamburger span {
+  display: block;
+  height: 3px;
+  width: 100%;
+  background-color: #D9D9D9;
+  border-radius: 4px;
+  transition: all 240ms cubic-bezier(.2,.9,.2,1);
+}
+
+/* transform into X */
+.hamburger.active span:nth-child(1) {
+  transform: rotate(45deg) translate(5px, 5px);
+}
+.hamburger.active span:nth-child(2) {
+  opacity: 0;
+  transform: translateX(-6px);
+}
+.hamburger.active span:nth-child(3) {
+  transform: rotate(-45deg) translate(5px, -5px);
+}
+
+/* Mobile nav panel (slide-in) */
+@media (max-width: 768px) {
+  .hamburger {
+    display: flex;
+  }
+
+  .nav-links {
+    position: fixed;
+    right: 0;
+    width: 320px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)),;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 22px;
+    gap: 18px;
+    transform: translateX(110%);
+    transition: transform 320ms cubic-bezier(.2,.9,.2,1);
+    box-shadow: -8px 0 28px rgba(0,0,0,0.35);
+    border-left: 1px solid rgba(255,255,255,0.02);
+    z-index: 1001;
+  }
+
+  .nav-links.open {
+    transform: translateX(0);
+  }
+
+  .nav-links a {
+    display: inline-block;
+    padding: 12px 14px;
+    font-size: 1.05rem;
+    color: #D9D9D9;
+    border-radius: 10px;
+  }
+
+  /* Mobile auth region */
+  .mobile-auth {
+    margin-top: 10px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(242,213,187,0.06);
+    display: block;
+  }
+
+  .login-btn,
+  .logout-btn {
+    width: 100%;
+    text-align: left;
+    padding: 12px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    border: 1px solid rgba(255,255,255,0.04);
+    color: #0D0D0D;
+  }
+
+  .user-section {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .username {
+    color: #D9D9D9;
+    font-weight: 700;
+  }
+}
+
+/* Small screens: compact spacing for logo and nav */
+@media (max-width: 420px) {
+  .navbar { padding: 0 14px; }
+  .logo-header { height: 46px; }
+  .nav-links { gap: 12px; }
+}
+
+/* Accessibility focus states */
+.nav-links a:focus,
+.login-btn:focus,
+.logout-btn:focus,
+.hamburger:focus {
+  outline: 3px solid rgba(106,166,201,0.14);
+  outline-offset: 3px;
+  border-radius: 8px;
+}

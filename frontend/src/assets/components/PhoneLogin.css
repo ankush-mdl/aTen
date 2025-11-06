@@ -1,0 +1,160 @@
+.phone-login-page {
+  display: flex;
+  height: 90vh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: #f9fafc;
+  font-family: "Poppins", sans-serif;
+}
+
+/* Heading */
+.phone-login-page h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  color: #333;
+}
+
+/* Input fields */
+.phone-input,
+.otp-input,
+.name-input {
+  width: 250px;
+  padding: 0.75rem 1rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  outline: none;
+  transition: border 0.3s ease;
+}
+
+.phone-input:focus,
+.otp-input:focus,
+.name-input:focus {
+  border-color: #262421;
+}
+
+/* Phone input with prefix */
+.phone-wrapper {
+  display: flex;
+  align-items: center;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  height: 40px;
+  overflow: hidden;
+  width: 250px;
+  margin-bottom: 1rem;
+  background: #fff;
+}
+
+.phone-prefix {
+  background: #f1f1f1;
+  color: #555;
+  padding: 0.7rem 1rem;
+  font-size: 0.95rem;
+  user-select: none;
+}
+.role-btn{
+  padding: 1rem;
+  width: 6rem;
+}
+.role-btn:first-child{
+  border-top-left-radius: 2rem;
+  border-bottom-left-radius: 2rem;
+}
+.role-btn:last-child{
+  border-top-right-radius: 2rem;
+  border-bottom-right-radius: 2rem;
+}
+.active{
+  background: #262421;
+  color: #f1f1f1;
+}
+.phone-input {
+    margin-top: 16px;
+    width: 170px;
+  border: none;
+  outline: none;
+  background: transparent;
+}
+
+/* Buttons */
+.send-btn,
+.verify-btn {
+  width: 250px;
+  padding: 0.8rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.send-btn {
+  background-color: #262421;
+  color: #fff;
+}
+
+.send-btn:hover {
+  background-color: #262421;
+}
+
+.verify-btn {
+  background-color: #262421;
+  color: #fff;
+}
+
+.verify-btn:hover {
+  background-color: #262421;
+}
+
+/* reCAPTCHA container */
+#recaptcha-container {
+  margin-top: 1rem;
+}
+
+.spinner {
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top: 3px solid #fff;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  margin: 0 auto;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Disable button when loading */
+.send-btn:disabled,
+.verify-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .phone-login-page {
+    padding: 1rem;
+  }
+
+  .phone-input,
+  .otp-input,
+  .name-input,
+  .send-btn,
+  .verify-btn,
+  .phone-wrapper {
+    width: 100%;
+    max-width: 320px;
+  }
+}
