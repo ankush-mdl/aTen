@@ -2,12 +2,12 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
-import "../assets/pages/Project.css"; // your existing styles
+import "../assets/pages/Project.css";
 import { getImageUrl } from '../lib/api';
+import Dropdown from "../components/Dropdown";
 
 // Backend base: use localhost backend in dev, else same-origin
 const BACKEND_BASE = (typeof window !== "undefined" && window.location && window.location.hostname === "localhost") ? "http://localhost:5000" : "";
-
 
 function safeParse(jsonOrString, fallback = []) {
   if (jsonOrString === null || jsonOrString === undefined) return fallback;
@@ -32,16 +32,75 @@ export default function ProjectsList() {
   const [propertyTypeOptions, setPropertyTypeOptions] = useState([]);
   const [locationAreaOptions, setLocationAreaOptions] = useState([]);
   const [configurationOptions, setConfigurationOptions] = useState([]);
+// Fetch ALL possible filter options once
+const [allPropertyTypes, setAllPropertyTypes] = useState([]);
+const [allLocationAreas, setAllLocationAreas] = useState([]);
+const [allConfigurations, setAllConfigurations] = useState([]);
+useEffect(() => {
+  const fetchFilterOptions = async () => {
+    try {
+      const res = await fetch(`${BACKEND_BASE}/api/projects?limit=1000`);
+      if (!res.ok) throw new Error("Failed to load options");
+      const data = await res.json();
+      const raw = data.items || [];
 
-  const fetchList = async () => {
+      const types = new Set();
+      const areas = new Set();
+      const confs = new Set();
+
+      raw.forEach((p) => {
+        if (p.property_type) types.add(p.property_type);
+        if (p.location_area) areas.add(p.location_area);
+        (safeParse(p.configurations, [])).forEach((c) => {
+          const name = c?.type || c?.name;
+          if (name) confs.add(name);
+        });
+      });
+
+      const sortedTypes = Array.from(types).sort();
+      const sortedAreas = Array.from(areas).sort();
+      const sortedConfs = Array.from(confs).sort();
+
+      setAllPropertyTypes(sortedTypes);
+      setAllLocationAreas(sortedAreas);
+      setAllConfigurations(sortedConfs);
+
+      // Also set current dropdown options
+      setPropertyTypeOptions(sortedTypes);
+      setLocationAreaOptions(sortedAreas);
+      setConfigurationOptions(sortedConfs);
+    } catch (err) {
+      console.error("Failed to load filter options:", err);
+    }
+  };
+
+  fetchFilterOptions();
+}, [BACKEND_BASE]); // Run once
+  /**
+   * fetchList(overrides = {})
+   * overrides may contain: q, city, property_type, location_area, configuration, page, limit
+   * configuration is applied client-side (configurations is JSON array per project)
+   */
+  const fetchList = async (overrides = {}) => {
     setLoading(true);
     try {
+      // compute effective params (overrides take precedence)
+      const qParam = overrides.q !== undefined ? overrides.q : q;
+      const cityParam = overrides.city !== undefined ? overrides.city : city;
+      const propTypeParam = overrides.property_type !== undefined ? overrides.property_type : propertyType;
+      const locationParam = overrides.location_area !== undefined ? overrides.location_area : locationArea;
+      const pageParam = overrides.page !== undefined ? overrides.page : 1;
+      const limitParam = overrides.limit !== undefined ? overrides.limit : 24;
+      const configurationParam = overrides.configuration !== undefined ? overrides.configuration : configuration;
+
       const params = new URLSearchParams();
-      if (q) params.set("q", q);
-      if (city) params.set("city", city);
-      if (propertyType) params.set("property_type", propertyType);
-      if (locationArea) params.set("location_area", locationArea);
-      // configuration will be applied client-side because configurations are JSON arrays
+      if (qParam) params.set("q", qParam);
+      if (cityParam) params.set("city", cityParam);
+      if (propTypeParam) params.set("property_type", propTypeParam);
+      if (locationParam) params.set("location_area", locationParam);
+      params.set("page", String(pageParam));
+      params.set("limit", String(limitParam));
+
       const url = `${BACKEND_BASE}/api/projects?${params.toString()}`;
       const res = await fetch(url);
       if (!res.ok) {
@@ -51,7 +110,7 @@ export default function ProjectsList() {
       const data = await res.json();
       const raw = data.items || [];
 
-      // parse JSON columns safely (gallery, configurations, price_info)
+      // parse columns safely
       const parsed = raw.map((p) => ({
         ...p,
         gallery: safeParse(p.gallery, []),
@@ -65,10 +124,10 @@ export default function ProjectsList() {
         })(),
       }));
 
-      // client-side filtering for configuration (since it's a JSON array)
+      // apply client-side configuration filter (if requested)
       let filtered = parsed;
-      if (configuration) {
-        const confLower = configuration.toLowerCase();
+      if (configurationParam) {
+        const confLower = String(configurationParam).toLowerCase();
         filtered = parsed.filter((p) =>
           (p.configurations || []).some((c) => {
             const t = (c && (c.type || c.name || "")).toString().toLowerCase();
@@ -79,20 +138,8 @@ export default function ProjectsList() {
 
       setItems(filtered);
 
-      // derive options for selects from raw data (unique values)
-      const types = new Set();
-      const areas = new Set();
-      const confs = new Set();
-      parsed.forEach((p) => {
-        if (p.property_type) types.add(p.property_type);
-        if (p.location_area) areas.add(p.location_area);
-        (p.configurations || []).forEach((c) => {
-          if (c && (c.type || c.name)) confs.add((c.type || c.name).toString());
-        });
-      });
-      setPropertyTypeOptions(Array.from(types).sort());
-      setLocationAreaOptions(Array.from(areas).sort());
-      setConfigurationOptions(Array.from(confs).sort());
+      // derive options for selects from raw data (unique values). Keep existing order stable.
+      
     } catch (err) {
       console.error("Failed to fetch projects:", err);
       toast.error("Failed to load projects. Check server");
@@ -108,55 +155,83 @@ export default function ProjectsList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // helper: trigger search (kept as explicit action)
+  // explicit search button behavior (optional)
   const onSearchClick = () => {
-    fetchList();
+    fetchList({ q, city, property_type: propertyType, location_area: locationArea, configuration });
+  };
+
+  // handlers that set state AND request fetchList with overrides immediately
+  const handlePropertyTypeChange = (v) => {
+    setPropertyType(v);
+    fetchList({ property_type: v, q, city, location_area: locationArea, configuration });
+  };
+  const handleLocationAreaChange = (v) => {
+    setLocationArea(v);
+    fetchList({ location_area: v, q, city, property_type: propertyType, configuration });
+  };
+  const handleConfigurationChange = (v) => {
+    setConfiguration(v);
+    fetchList({ configuration: v, q, city, property_type: propertyType, location_area: locationArea });
   };
 
   return (
     <div className="projects-page">
       <div className="projects-header">
         <h1>Browse Properties</h1>
+
         <div className="projects-filters" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <input
+            aria-label="Search projects"
             placeholder="Search projects..."
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-          <input placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
+          <input
+            aria-label="City"
+            placeholder="City"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+          />
 
-          <select value={propertyType} onChange={(e) => setPropertyType(e.target.value)}>
-            <option value="">All types</option>
-            {propertyTypeOptions.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
+          {/* Dropdown from your components */}
+          <div className="select-wrap" style={{ minWidth: 160 }}>
+            <Dropdown
+              value={propertyType}
+              onChange={(v) => handlePropertyTypeChange(v)}
+              options={propertyTypeOptions}
+              placeholder="All types"
+            />
+          </div>
 
-          <select value={locationArea} onChange={(e) => setLocationArea(e.target.value)}>
-            <option value="">All areas</option>
-            {locationAreaOptions.map((a) => (
-              <option key={a} value={a}>{a}</option>
-            ))}
-          </select>
+          <div className="select-wrap" style={{ minWidth: 160 }}>
+            <Dropdown
+              value={locationArea}
+              onChange={(v) => handleLocationAreaChange(v)}
+              options={locationAreaOptions}
+              placeholder="All areas"
+            />
+          </div>
 
-          <select value={configuration} onChange={(e) => setConfiguration(e.target.value)}>
-            <option value="">Any configuration</option>
-            {configurationOptions.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+          <div className="select-wrap" style={{ minWidth: 160 }}>
+            <Dropdown
+              value={configuration}
+              onChange={(v) => handleConfigurationChange(v)}
+              options={configurationOptions}
+              placeholder="Any configuration"
+            />
+          </div>
 
-          <button onClick={onSearchClick}>Search</button>
+          <button className="btn btn-filter" onClick={onSearchClick}>Search</button>
         </div>
       </div>
 
       {loading ? (
         <div style={{ padding: 24 }}>Loading projects…</div>
       ) : items.length === 0 ? (
-        <div style={{ padding: 28, color: "#666" }}>
+        <div style={{ padding: 28, color: "#666" }} className="projects-empty">
           No projects found.
           <div style={{ marginTop: 12 }}>
-            <button onClick={fetchList} className="btn">Reload</button>
+            <button onClick={() => fetchList()} className="btn">Reload</button>
           </div>
         </div>
       ) : (
@@ -165,7 +240,7 @@ export default function ProjectsList() {
             <article key={p.id} className="project-card">
               <Link to={`/projects/${p.slug}`} className="card-link">
                 <div className="card-media">
-                 <img src={ getImageUrl((p.thumbnail) || (p.gallery && p.gallery[0]) || "/placeholder.jpg") } alt={p.title} />
+                  <img src={ getImageUrl((p.thumbnail) || (p.gallery && p.gallery[0]) || "/placeholder.jpg") } alt={p.title} loading="lazy" />
                 </div>
                 <div className="card-body">
                   <h3>{p.title}</h3>

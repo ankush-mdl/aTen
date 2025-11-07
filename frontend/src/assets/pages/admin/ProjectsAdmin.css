@@ -9,6 +9,10 @@
   --shadow-1: 0 8px 26px rgba(18,28,34,0.06);
   --shadow-2: 0 14px 40px rgba(18,28,34,0.10);
 }
+.buttons{
+  display: flex;
+  gap: 1rem;
+}
 .function{
   display: flex;
   align-items: center;

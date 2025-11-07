@@ -2,6 +2,13 @@
 import { Link, useParams, useNavigate } from "react-router-dom";
 import "./../assets/pages/Catalog.css";
 import React, { useState, useEffect } from "react";
+import toast from "react-hot-toast";
+
+/* backend base (dev -> localhost backend, else same-origin) */
+const BACKEND_BASE =
+  typeof window !== "undefined" && window.location && window.location.hostname === "localhost"
+    ? "http://localhost:5000"
+    : "";
 
 /* options */
 const catalogOptions = {
@@ -88,7 +95,7 @@ export default function CatalogWithSummary() {
     const user = JSON.parse(localStorage.getItem("user"));
     const user_id = user?.id;
     if (!user_id) {
-      alert("Please login first before submitting an enquiry.");
+      toast.error("Please login first before submitting an enquiry.");
       return;
     }
 
@@ -103,31 +110,31 @@ export default function CatalogWithSummary() {
 
     if (type && type.toLowerCase() === "bathroom") {
       if (!selected.bathroomType) {
-        alert("Please select a bathroom option (Premium or Luxe).");
+        toast.error("Please select a bathroom option (Premium or Luxe).");
         return;
       }
       payloadBase.bathroom_type = selected.bathroomType;
     } else if (type && type.toLowerCase() === "kitchen") {
       if (!selected.kitchenType) {
-        alert("Please select kitchen type (Modular or Semi Modular).");
+        toast.error("Please select kitchen type (Modular or Semi Modular).");
         return;
       }
       payloadBase.kitchen_type = selected.kitchenType;
       payloadBase.kitchen_theme = selected.kitchenTheme || "";
     } else {
-      alert("Invalid KB type.");
+      toast.error("Invalid KB type.");
       return;
     }
 
     try {
-      const res = await fetch("http://localhost:5000/api/kb_enquiries", {
+      const res = await fetch(`${BACKEND_BASE || "http://localhost:5000"}/api/kb_enquiries`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payloadBase),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        alert("✅ KB Enquiry submitted. We will reach out soon.");
+        toast.success("KB Enquiry submitted. We will reach out soon.");
         // reset some fields
         setSelected((prev) => ({
           ...prev,
@@ -140,11 +147,11 @@ export default function CatalogWithSummary() {
         }));
       } else {
         console.error("Failed KB enquiry:", data);
-        alert("Failed to submit KB enquiry. " + (data.error || ""));
+        toast.error("Failed to submit KB enquiry. " + (data.error || ""));
       }
     } catch (err) {
       console.error("Error sending KB enquiry:", err);
-      alert("Network error while submitting enquiry.");
+      toast.error("Network error while submitting enquiry.");
     }
   };
 
@@ -153,7 +160,7 @@ export default function CatalogWithSummary() {
     const user = JSON.parse(localStorage.getItem("user"));
     const user_id = user?.id;
     if (!user_id) {
-      alert("Please login first before submitting an enquiry.");
+      toast.error("Please login first before submitting an enquiry.");
       return;
     }
 
@@ -168,14 +175,14 @@ export default function CatalogWithSummary() {
     };
 
     try {
-      const res = await fetch("http://localhost:5000/api/custom_enquiries", {
+      const res = await fetch(`${BACKEND_BASE || "http://localhost:5000"}/api/custom_enquiries`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        alert("✅ Custom enquiry submitted. We will contact you.");
+        toast.success("Custom enquiry submitted. We will contact you.");
         setSelected((prev) => ({
           ...prev,
           email: "",
@@ -185,11 +192,67 @@ export default function CatalogWithSummary() {
         }));
       } else {
         console.error("Failed custom enquiry:", data);
-        alert("Failed to submit custom enquiry. " + (data.error || ""));
+        toast.error("Failed to submit custom enquiry. " + (data.error || ""));
       }
     } catch (err) {
       console.error("Error sending custom enquiry:", err);
-      alert("Network error while submitting enquiry.");
+      toast.error("Network error while submitting enquiry.");
+    }
+  };
+
+  /* ----- Default enquiry (general/catalog) ----- */
+  const submitDefaultEnquiry = async () => {
+    const user = JSON.parse(localStorage.getItem("user"));
+    if (!user) {
+      toast.error("Please log in first.");
+      return;
+    }
+    const user_id = user.id;
+    const enquiryData = {
+      user_id,
+      email: selected.email,
+      city: selected.city || "",
+      bhk_type: selected.apartmentType,
+      bathroom_number: parseInt(selected.washrooms) || 0,
+      kitchen_type: (selected.kitchens || []).join(", "),
+      material: (selected.materials || []).join(", "),
+      area: parseInt(selected.carpetArea) || 0,
+      theme: (selected.themes || []).join(", "),
+    };
+
+    try {
+      const response = await fetch(`${BACKEND_BASE || "http://localhost:5000"}/api/enquiries`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(enquiryData),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        toast.success("Enquiry submitted successfully! Our agent will contact you soon.");
+        // reset form (keep apartmentType)
+        setSelected({
+          apartmentType: selected.apartmentType,
+          email: "",
+          name: "",
+          city: "",
+          washrooms: "",
+          carpetArea: "",
+          themes: [],
+          kitchens: [],
+          materials: [],
+          bathroomType: "",
+          kitchenType: "",
+          kitchenTheme: "",
+          custom_type: "",
+          custom_message: "",
+        });
+      } else {
+        console.error("Failed to submit enquiry:", data);
+        toast.error("Failed to submit enquiry. " + (data.error || ""));
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Something went wrong while submitting the enquiry.");
     }
   };
 
@@ -217,7 +280,7 @@ export default function CatalogWithSummary() {
       </div>
 
       <div className="catalog-summary">
-          <button className="back-btn" onClick={() => navigate("/interio")}>← Back</button>
+        <button className="back-btn" onClick={() => navigate("/interio")}>← Back</button>
         <h2>Bathroom Enquiry</h2>
 
         <div className="summary-fields">
@@ -285,7 +348,7 @@ export default function CatalogWithSummary() {
       </div>
 
       <div className="catalog-summary">
-          <button className="back-btn" onClick={() => navigate("/interio")}>← Back</button>
+        <button className="back-btn" onClick={() => navigate("/interio")}>← Back</button>
         <h2>Kitchen Enquiry</h2>
 
         <div className="summary-fields">
@@ -345,7 +408,7 @@ export default function CatalogWithSummary() {
         </div>
 
         <div className="catalog-summary">
-            <button className="back-btn" onClick={() => navigate("/interio")}>← Back</button>
+          <button className="back-btn" onClick={() => navigate("/interio")}>← Back</button>
           <h2>Custom / Commercial Enquiry</h2>
 
           <div className="summary-fields">
@@ -411,7 +474,7 @@ export default function CatalogWithSummary() {
 
       {/* RIGHT PANEL (SUMMARY) */}
       <div className="catalog-summary">
-          <button className="back-btn" onClick={() => navigate("/interio")}>← Back</button>
+        <button className="back-btn" onClick={() => navigate("/interio")}>← Back</button>
         <h2>Select Ideas You Are Open To</h2>
 
         <div className="summary-fields">
@@ -462,53 +525,7 @@ export default function CatalogWithSummary() {
           ))}
         </div>
 
-        <button className="quote-btn" onClick={() => {
-          // reuse existing /api/enquiries path for default flow
-          (async () => {
-            const user = JSON.parse(localStorage.getItem("user"));
-            if (!user) { alert("Please log in first."); return; }
-            const user_id = user.id;
-            const enquiryData = {
-              user_id,
-              email: selected.email,
-              city: selected.city || "",
-              bhk_type: selected.apartmentType,
-              bathroom_number: parseInt(selected.washrooms) || 0,
-              kitchen_type: selected.kitchens.join(", "),
-              material: selected.materials.join(", "),
-              area: parseInt(selected.carpetArea) || 0,
-              theme: selected.themes.join(", "),
-            };
-            try {
-              const response = await fetch("http://localhost:5000/api/enquiries", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(enquiryData),
-              });
-              const data = await response.json();
-              if (response.ok) {
-                alert("✅ Enquiry submitted successfully! Our agent will contact you soon.");
-                // reset form (keep apartmentType)
-                setSelected({
-                  apartmentType: selected.apartmentType,
-                  email: "",
-                  name: "",
-                  city: "",
-                  washrooms: "",
-                  carpetArea: "",
-                  themes: [],
-                  kitchens: [],
-                  materials: [],
-                });
-              } else {
-                alert("❌ Failed to submit enquiry. " + (data.error || ""));
-              }
-            } catch (err) {
-              console.error(err);
-              alert("⚠️ Something went wrong while submitting the enquiry.");
-            }
-          })();
-        }}>Get in Touch & Start Designing</button>
+        <button className="quote-btn" onClick={submitDefaultEnquiry}>Get in Touch & Start Designing</button>
       </div>
     </div>
   );

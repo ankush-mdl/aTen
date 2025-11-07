@@ -23,85 +23,78 @@ function safeParse(v, fallback = []) {
 
 /**
  * GET /api/projects
- * Optional query: ?city=&q=&page=&limit=
+ * Supports: ?q, ?city, ?property_type, ?location_area, ?configuration, ?page, ?limit
+ * Returns full project rows (SELECT *) with JSON fields parsed.
  */
 router.get("/", (req, res) => {
-  const { city, q, page = 1, limit = 24 } = req.query;
+  const {
+    q,
+    city,
+    property_type,
+    location_area,
+    configuration,
+    page = 1,
+    limit = 24,
+  } = req.query;
+
   const offset = (Math.max(1, parseInt(page)) - 1) * parseInt(limit);
 
-  // include thumbnail, blocks, units, floors for listing preview
-  let sql =
-    "SELECT id, slug, title, location_area, city, address, rera, status, property_type, gallery, price_info, thumbnail, blocks, units, floors FROM projects";
+  // Select all columns
+  let sql = `SELECT * FROM projects`;
+
   const params = [];
   const where = [];
+
   if (city) {
-    where.push("city = ?");
+    where.push("LOWER(city) = LOWER(?)");
     params.push(city);
   }
+
+  if (property_type) {
+    where.push("LOWER(property_type) = LOWER(?)");
+    params.push(property_type);
+  }
+
+  if (location_area) {
+    where.push("LOWER(location_area) = LOWER(?)");
+    params.push(location_area);
+  }
+
   if (q) {
     where.push("(title LIKE ? OR address LIKE ? OR rera LIKE ?)");
     params.push(`%${q}%`, `%${q}%`, `%${q}%`);
   }
-  if (where.length) sql += " WHERE " + where.join(" AND ");
-  sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?";
 
+  // Filter by configuration (stored as JSON text)
+  if (configuration) {
+    where.push("configurations LIKE ?");
+    params.push(`%${configuration}%`);
+  }
+
+  if (where.length) {
+    sql += " WHERE " + where.join(" AND ");
+  }
+
+  sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?";
   params.push(parseInt(limit), offset);
 
   db.all(sql, params, (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) {
+      console.error("Fetch projects error:", err);
+      return res.status(500).json({ error: err.message });
+    }
 
+    // parse JSON/text columns so frontend receives structured data
     const list = rows.map((r) => ({
       ...r,
+      configurations: r.configurations ? safeParse(r.configurations, []) : [],
+      highlights: r.highlights ? safeParse(r.highlights, []) : [],
+      amenities: r.amenities ? safeParse(r.amenities, []) : [],
       gallery: r.gallery ? safeParse(r.gallery, []) : [],
       price_info: r.price_info ? safeParse(r.price_info, null) : null,
     }));
 
     res.json({ items: list, page: parseInt(page) });
-  });
-});
-
-/**
- * GET /api/projects/:idOrSlug  (detail)
- * Accepts numeric id or slug
- */
-router.get("/:idOrSlug", (req, res) => {
-  const { idOrSlug } = req.params;
-
-  // numeric id
-  if (/^\d+$/.test(idOrSlug)) {
-    const id = Number(idOrSlug);
-    db.get("SELECT * FROM projects WHERE id = ?", [id], (err, row) => {
-      if (err) return res.status(500).json({ error: err.message });
-      if (!row) return res.status(404).json({ error: "Not found" });
-
-      const parsed = {
-        ...row,
-        configurations: safeParse(row.configurations, []),
-        highlights: safeParse(row.highlights, []),
-        amenities: safeParse(row.amenities, []),
-        gallery: safeParse(row.gallery, []),
-        price_info: row.price_info ? safeParse(row.price_info, null) : null,
-      };
-      return res.json({ project: parsed });
-    });
-    return;
-  }
-
-  // slug
-  const slug = idOrSlug;
-  db.get("SELECT * FROM projects WHERE slug = ?", [slug], (err, row) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!row) return res.status(404).json({ error: "Not found" });
-
-    const parsed = {
-      ...row,
-      configurations: safeParse(row.configurations, []),
-      highlights: safeParse(row.highlights, []),
-      amenities: safeParse(row.amenities, []),
-      gallery: safeParse(row.gallery, []),
-      price_info: row.price_info ? safeParse(row.price_info, null) : null,
-    };
-    return res.json({ project: parsed });
   });
 });
 

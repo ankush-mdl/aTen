@@ -21,7 +21,7 @@ router.post("/", (req, res) => {
   }
 
   const sql = `
-    INSERT INTO enquiries (
+    INSERT INTO home_enquiries (
       user_id, email, city, bhk_type, bathroom_number, kitchen_type, material,
       area, theme
     )
@@ -43,12 +43,12 @@ router.post("/", (req, res) => {
     ],
     function (err) {
       if (err) {
-        console.error("❌ Error inserting enquiry:", err);
+        console.error("Error inserting enquiry:", err);
         return res.status(500).json({ error: "Database insert failed" });
       }
 
       res.status(201).json({
-        message: "✅ Enquiry saved successfully",
+        message: "Enquiry saved successfully",
         enquiry_id: this.lastID,
       });
     }

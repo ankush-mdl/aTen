@@ -16,8 +16,6 @@ function safeParseJson(v, fallback = []) {
 // Backend base: use localhost backend in dev, else same-origin
 const BACKEND_BASE = (typeof window !== "undefined" && window.location && window.location.hostname === "localhost") ? "http://localhost:5000" : "";
 
-
-// export default component
 export default function ProjectForm() {
   const { id } = useParams(); // "new" or numeric/id or slug
   const navigate = useNavigate();
@@ -52,6 +50,12 @@ export default function ProjectForm() {
 
   const [amenityText, setAmenityText] = useState("");
   const [highlightText, setHighlightText] = useState("");
+
+  // --- new state: select existing uploads modal ---
+  const [showUploadsModal, setShowUploadsModal] = useState(false);
+  const [uploadsList, setUploadsList] = useState([]); // array of url strings (relative or absolute)
+  const [uploadsLoading, setUploadsLoading] = useState(false);
+  const [selectedUploads, setSelectedUploads] = useState(new Set());
 
   // ---- load existing project if editing ----
   useEffect(() => {
@@ -174,6 +178,7 @@ export default function ProjectForm() {
         if (j.url) uploadedUrls.push(j.url);
         else if (j.path) uploadedUrls.push(j.path);
         else if (j.filename) uploadedUrls.push(`/uploads/${j.filename}`);
+        else if (typeof j === "string") uploadedUrls.push(j);
       }
 
      if (uploadedUrls.length) {
@@ -218,6 +223,63 @@ export default function ProjectForm() {
   const setThumbnail = (url) => {
     setForm(s => ({ ...s, thumbnail: url }));
     toast.success("Thumbnail selected");
+  };
+
+  // ---- new: fetch existing uploads from backend ----
+  async function fetchUploadsList() {
+    setUploadsLoading(true);
+    setUploadsList([]);
+    setSelectedUploads(new Set());
+    try {
+      const res = await fetch(`${BACKEND_BASE}/api/uploads`); // assume this endpoint exists
+      if (!res.ok) {
+        const txt = await res.text().catch(()=>"");
+        // try another common endpoint fallback
+        console.warn("Primary /api/uploads failed:", res.status, txt);
+        // attempt alternative endpoint
+        const alt = await fetch(`${BACKEND_BASE}/uploads`); // maybe returns file listing as html (won't help) but try
+        if (!alt.ok) throw new Error(`Uploads listing failed ${res.status}`);
+      } else {
+        const body = await res.json().catch(()=>null);
+        let arr = [];
+        if (Array.isArray(body)) arr = body;
+        else if (body && Array.isArray(body.files)) arr = body.files;
+        else if (body && Array.isArray(body.items)) arr = body.items;
+        else if (body && typeof body === "object") {
+          // maybe object of { filename: path } pairs
+          arr = Object.values(body).filter(v => typeof v === "string");
+        }
+        // normalize strings: prefix backend base if needed (getImageUrl does this)
+        setUploadsList(arr);
+      }
+    } catch (err) {
+      console.error("Failed to fetch uploads list:", err);
+      toast.error("Failed to load uploads list. Check backend endpoint /api/uploads");
+    } finally {
+      setUploadsLoading(false);
+    }
+  }
+
+  // toggle selection in modal
+  const toggleUploadSelect = (url) => {
+    setSelectedUploads(prev => {
+      const s = new Set(prev);
+      if (s.has(url)) s.delete(url);
+      else s.add(url);
+      return s;
+    });
+  };
+
+  const addSelectedUploadsToGallery = () => {
+    const picked = Array.from(selectedUploads);
+    if (picked.length === 0) { toast.error("No images selected"); return; }
+    setForm(s => {
+      const newGallery = [...s.gallery, ...picked];
+      const thumbnail = s.thumbnail || newGallery[0] || "";
+      return { ...s, gallery: newGallery, thumbnail };
+    });
+    toast.success(`Added ${picked.length} image(s) to gallery`);
+    setShowUploadsModal(false);
   };
 
   // ---- submit ----
@@ -399,9 +461,22 @@ export default function ProjectForm() {
             <small>Upload images (jpg/png). Select one image as listing thumbnail.</small>
           </div>
 
-          <div className="uploader-row">
+          <div className="uploader-row" style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={onFileChange} style={{ display: "none" }} />
             <button type="button" className="btn" onClick={() => fileInputRef.current?.click()}>{uploading ? "Uploading..." : "Select & Upload"}</button>
+
+            {/* New button: select existing uploads */}
+            <button
+              type="button"
+              className="btn"
+              onClick={async () => {
+                setShowUploadsModal(true);
+                // fetch list when opened
+                await fetchUploadsList();
+              }}
+            >
+              Select from uploads
+            </button>
           </div>
 
           <div className="gallery-preview" style={{ marginTop: 12 }}>
@@ -473,6 +548,112 @@ export default function ProjectForm() {
           <button type="button" className="btn" onClick={() => navigate("/admin/projects")} disabled={loading}>Cancel</button>
         </div>
       </form>
+
+      {/* -------- Uploads modal (select existing) -------- */}
+     {showUploadsModal && (
+  <div className="modal-backdrop" onClick={() => setShowUploadsModal(false)}>
+    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <h3 style={{ margin: 0 }}>Select images from uploads</h3>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn" onClick={() => { setSelectedUploads(new Set()); }}>Clear</button>
+          <button className="btn" onClick={() => setShowUploadsModal(false)}>Close</button>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 10 }}>
+        {uploadsLoading ? (
+          <div>Loading images…</div>
+        ) : uploadsList.length === 0 ? (
+          <div style={{ color: "#666" }}>No uploads found on server (endpoint /api/uploads).</div>
+        ) : null}
+      </div>
+
+      <div className="uploads-grid">
+        {uploadsList.map((u, idx) => {
+          const url = getImageUrl(u) || u;
+
+          const normalizePath = (p) => {
+            if (!p) return "";
+            let s = String(p).trim();
+            // remove backend base for consistent comparison
+            if (typeof BACKEND_BASE === "string" && BACKEND_BASE && s.startsWith(BACKEND_BASE)) {
+              s = s.replace(BACKEND_BASE, "");
+            }
+            if (!s.startsWith("/")) s = "/" + s;
+            return s;
+          };
+
+          const inGallery = form.gallery.some(g => normalizePath(g) === normalizePath(u));
+          const isThumbnail = normalizePath(form.thumbnail) === normalizePath(u);
+          const isSelected = selectedUploads.has(u);
+          const disabled = inGallery;
+
+          return (
+            <div
+              key={idx}
+              className={`image-card ${disabled ? "disabled" : ""} ${isSelected ? "selected" : ""}`}
+              onClick={() => { if (!disabled) toggleUploadSelect(u); }}
+              title={disabled ? "Already added to gallery" : (isSelected ? "Click to unselect" : "Click to select")}
+            >
+              <div className="media">
+                <img src={url} alt={`upload-${idx}`} />
+              </div>
+
+              <div className="meta">
+                <label className="select-label">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={(e) => { if (!disabled) toggleUploadSelect(u); }}
+                    disabled={disabled}
+                  />
+                  <span>{disabled ? "In gallery" : "Select"}</span>
+                </label>
+
+                {isThumbnail && <span className="thumb-badge">✓ Thumbnail</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button className="btn" onClick={() => setShowUploadsModal(false)}>Cancel</button>
+        <button
+          className="btn primary"
+          onClick={() => {
+            // deduplicate and add
+            const picked = Array.from(selectedUploads || []);
+            if (picked.length === 0) { toast.error("No images selected"); return; }
+            setForm(s => {
+              // normalize by keeping original string paths, but dedupe
+              const combined = [...(s.gallery || []), ...picked];
+              const unique = Array.from(new Set(combined));
+              const thumbnail = s.thumbnail || unique[0] || "";
+              return { ...s, gallery: unique, thumbnail };
+            });
+            // clear selection and close
+            setSelectedUploads(new Set());
+            setShowUploadsModal(false);
+            toast.success(`Added ${picked.length} image(s) to gallery`);
+          }}
+          disabled={(selectedUploads && selectedUploads.size === 0)}
+        >
+          Add selected ({selectedUploads ? selectedUploads.size : 0})
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }
+
+// minimal inline styles for modal (you can move to CSS file)
+const backdropStyle = {
+  position: "fixed", inset: 0, background: "rgba(10,10,10,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999
+};
+const modalStyle = {
+  width: "min(1100px, 96%)", maxHeight: "88vh", overflow: "hidden", background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
+};

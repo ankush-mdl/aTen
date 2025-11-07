@@ -11,11 +11,18 @@
 .project-form {
   width: 100%;
   max-width: var(--max-width);
-  background: var(--card-bg);
+  background: #eaeaea;
   border-radius: var(--radius);
   padding: 22px;
   box-shadow: var(--shadow-lg);
   box-sizing: border-box;
+}
+.thumb-active-label {
+  background: #0b7285;
+  color: white;
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  border-radius: 6px;
 }
 
 /* headings */
@@ -26,7 +33,7 @@
   letter-spacing: -0.2px;
 }
 .project-form .instructions {
-  border-left: 3px solid rgba(37,99,235,0.12);
+  border-left: 3px solid rgba(1, 1, 1, 0.12);
   background: linear-gradient(180deg, rgba(43,108,176,0.03), rgba(255,255,255,0));
   padding: 12px 14px;
   border-radius: 8px;
@@ -146,7 +153,8 @@ input{
 .gallery-item {
   position:relative;
   width:150px;
-  height:100px;
+  height:auto;
+  max-height: 140px;
   border-radius:10px;
   overflow:hidden;
   background:#f3f4f6;
@@ -212,4 +220,105 @@ input{
   .gallery-item { width: 100%; height: 160px; }
   .panel-header { flex-direction: column; align-items:flex-start; gap:6px; }
   .chips { gap:6px; }
+}
+/* Uploads modal / grid (for ProjectForm uploads modal) */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10,10,10,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal-content {
+  width: min(1100px, 96%);
+  max-height: 88vh;
+  overflow: hidden;
+  background: #fff;
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+/* uploads grid: larger cards */
+.uploads-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  max-height: 60vh;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+/* each card */
+.image-card {
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.06);
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  cursor: pointer;
+  padding: 8px;
+}
+
+.image-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 10px 26px rgba(12,18,20,0.08);
+}
+
+.image-card.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  filter: grayscale(0.35);
+}
+
+.image-card .media {
+  width: 100%;
+  aspect-ratio: 4/3;
+  background: #f4f6f7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.image-card .media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.image-card .meta {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:8px;
+}
+
+.image-card .meta .select-label {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size: 12px;
+  color: #333;
+}
+
+.image-card.selected {
+  border: 2px solid #0b7285;
+  background: #e9fbfb;
+}
+
+.image-card .thumb-badge {
+  font-size: 12px;
+  padding: 4px 8px;
+  background: #0b7285;
+  color: #fff;
+  border-radius: 6px;
 }

@@ -10,8 +10,15 @@ const customEnquiryRoutes = require("./routes/customEnquiryRoutes");
 const projectsRoutes = require("./routes/projects");
 const uploads = require("./routes/uploads");
 const path = require("path");
+const importProjectsRouter = require("./routes/importProjects");
+const uploadsRouter = require("./routes/getUploads");
+const importImages = require("./routes/importImages")
 
 const app = express();
+const UPLOADS_DIR = path.join(__dirname, "uploads");
+app.use("/uploads", express.static(UPLOADS_DIR, {
+  maxAge: "7d",
+}));
 
 // CORS must be before routes
 app.use(cors());
@@ -35,7 +42,9 @@ app.use("/api/enquiries", enquiryRoutes);
 app.use("/api/auth", adminRoutes);
 app.use("/api/projects", projectsRoutes);
 app.use("/api/uploads", uploads);
-
+app.use("/api/import-projects", importProjectsRouter);
+app.use("/api/uploads", uploadsRouter);
+app.use("/api/import-images", importImages);
 // Root endpoint
 app.get("/", (req, res) => {
   res.send("A10 backend is running 🚀");
