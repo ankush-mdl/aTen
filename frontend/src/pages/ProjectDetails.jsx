@@ -1,12 +1,13 @@
-// src/pages/ProjectDetail.jsx
 import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import "../assets/pages/ProjectDetail.css";
 import { getImageUrl } from "../lib/api";
 
-// Backend base: use localhost backend in dev, else same-origin
-const BACKEND_BASE = (typeof window !== "undefined" && window.location && window.location.hostname === "localhost") ? "http://localhost:5000" : "";
+const BACKEND_BASE =
+  typeof window !== "undefined" && window.location.hostname === "localhost"
+    ? "http://localhost:5000"
+    : "";
 
 function safeParseJson(v, fallback = []) {
   if (!v && v !== "") return fallback;
@@ -22,6 +23,7 @@ export default function ProjectDetail() {
   const { slug } = useParams();
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [lightboxIndex, setLightboxIndex] = useState(null);
 
   useEffect(() => {
     if (!slug) return;
@@ -29,8 +31,9 @@ export default function ProjectDetail() {
 
     const loadBySlug = async () => {
       try {
-        // Try direct GET by slug first
-        const res = await fetch(`${BACKEND_BASE}/api/projects/${encodeURIComponent(slug)}`);
+        const res = await fetch(
+          `${BACKEND_BASE}/api/projects/${encodeURIComponent(slug)}`
+        );
         if (res.ok) {
           const data = await res.json();
           const p = data.project || data;
@@ -38,36 +41,23 @@ export default function ProjectDetail() {
           return;
         }
 
-        // If 404 (route exists but not found) or other, try fallback: fetch list and match by id or slug
-        if (res.status === 404 || res.status === 400 || res.status === 500) {
-          // fallback: fetch list
+        if ([400, 404, 500].includes(res.status)) {
           const listRes = await fetch(`${BACKEND_BASE}/api/projects`);
-          if (!listRes.ok) {
-            const txt = await listRes.text().catch(()=>"");
-            throw new Error(`List fetch failed ${listRes.status} ${txt}`);
-          }
+          if (!listRes.ok) throw new Error("List fetch failed");
           const listJson = await listRes.json();
           const items = listJson.items || [];
-          // try to find by slug OR by numeric id if slug is numeric
-          const bySlug = items.find(it => String(it.slug) === String(slug));
-          if (bySlug) {
-            normalizeAndSet(bySlug);
-            return;
-          }
+          const bySlug = items.find((it) => String(it.slug) === String(slug));
+          if (bySlug) return normalizeAndSet(bySlug);
+
           const maybeId = Number(slug);
           if (!Number.isNaN(maybeId)) {
-            const byId = items.find(it => Number(it.id) === maybeId);
-            if (byId) {
-              normalizeAndSet(byId);
-              return;
-            }
+            const byId = items.find((it) => Number(it.id) === maybeId);
+            if (byId) return normalizeAndSet(byId);
           }
-          // not found
           toast.error("Project not found");
           setProject(null);
         } else {
-          // other response codes
-          const txt = await res.text().catch(()=>"");
+          const txt = await res.text().catch(() => "");
           throw new Error(`Fetch failed ${res.status} ${txt}`);
         }
       } catch (err) {
@@ -87,14 +77,20 @@ export default function ProjectDetail() {
       }
       const normalized = {
         ...p,
-        // parse JSON string fields if present
         gallery: safeParseJson(p.gallery, []),
         highlights: safeParseJson(p.highlights, []),
         amenities: safeParseJson(p.amenities, []),
         configurations: safeParseJson(p.configurations, []),
-        price_info: (typeof p.price_info === "string") ? (() => {
-          try { return JSON.parse(p.price_info); } catch { return p.price_info || null; }
-        })() : p.price_info || null,
+        price_info:
+          typeof p.price_info === "string"
+            ? (() => {
+                try {
+                  return JSON.parse(p.price_info);
+                } catch {
+                  return p.price_info || null;
+                }
+              })()
+            : p.price_info || null,
       };
       setProject(normalized);
       setLoading(false);
@@ -104,73 +100,282 @@ export default function ProjectDetail() {
   }, [slug]);
 
   if (loading) return <div style={{ padding: 24 }}>Loading project…</div>;
-  if (!project) return (
-    <div style={{ padding: 24 }}>
-      <div>Project not found.</div>
-      <div style={{ marginTop: 12 }}><Link to="/projects">← Back to Projects</Link></div>
-    </div>
-  );
+  if (!project)
+    return (
+      <div style={{ padding: 24 }}>
+        <div>Project not found.</div>
+         <div className="back-btn-container">
+        <Link to="/projects" className="back-btn">
+          Back to Projects
+        </Link>
+      </div>
+
+      </div>
+    );
+
+  const gallery = project.gallery || [];
 
   return (
     <div className="project-detail">
+      {/* Hero Section */}
       <div className="hero">
         <div className="hero-media">
-          <img src={ getImageUrl((project.thumbnail) || "/placeholder.jpg") } alt={project.title} />
+          <img
+            src={getImageUrl(project.thumbnail || "/placeholder.jpg")}
+            alt={project.title}
+          />
         </div>
         <div className="hero-meta">
-          <h1>{project.title}</h1>
-          <div className="loc">{project.location_area}{project.city ? `, ${project.city}` : ""}</div>
-          {project.rera && <div className="rera">{project.rera}</div>}
+          <h1 className="project-title">{project.title}</h1>
+          <div className="project-location">
+            {project.location_area}
+            {project.city ? `, ${project.city}` : ""}
+          </div>
+          {project.rera && (
+            <div className="project-rera">RERA: {project.rera}</div>
+          )}
           <div className="cta-row">
-            {project.contact_phone && <a href={`tel:${project.contact_phone}`} className="btn">Call</a>}
             {project.contact_phone && (
-              <a href={`https://wa.me/${(project.contact_phone||"").replace(/\D/g,"")}`} className="btn wa" target="_blank" rel="noreferrer">WhatsApp</a>
+              <a href={`tel:${project.contact_phone}`} className="btn-call">
+                Call
+              </a>
             )}
-            {project.brochure_url && <a href={project.brochure_url} target="_blank" rel="noreferrer" className="btn">Brochure</a>}
+            {project.contact_phone && (
+              <a
+                href={`https://wa.me/${(project.contact_phone || "").replace(
+                  /\D/g,
+                  ""
+                )}`}
+                className="btn wa"
+                target="_blank"
+                rel="noreferrer"
+              >
+                WhatsApp
+              </a>
+            )}
+            {project.brochure_url && (
+              <a
+                href={project.brochure_url}
+                target="_blank"
+                rel="noreferrer"
+                className="btn secondary"
+              >
+                Download Brochure
+              </a>
+            )}
           </div>
         </div>
       </div>
 
+      {/* Content grid: overview + sidebar */}
       <div className="content-grid">
-      
-         <section className="overview">
-  <h2>Overview</h2>
-  <p>{project.address}</p>
-  <p>Status: {project.status}</p>
-  <p>Blocks: {project.blocks} </p>
-   <p>Floors: {project.floors}</p>
-   <p>Units: {project.units}</p>
+        {/* Overview Section */}
+        <section className="overview">
+          <div className="overview-top">
+            <h2>Project Overview</h2>
+            <div className="overview-sub">
+              <strong>{project.location_area}</strong>
+              {project.city ? ` • ${project.city}` : ""}
+            </div>
+          </div>
 
-  <h4>Amenities</h4>
-  <ul className="amenities">{(project.amenities||[]).map((a,i)=><li key={i}>{a}</li>)}</ul>
-</section>
+          <div className="overview-grid">
+            <div className="overview-item">
+              <div className="overview-label">Residential Property Type</div>
+              <div className="overview-value">
+                {project.property_type || project.type || "—"}
+              </div>
+            </div>
+            <div className="overview-item">
+              <div className="overview-label">Construction Status</div>
+              <div className="overview-value">{project.status || "—"}</div>
+            </div>
+            <div className="overview-item">
+              <div className="overview-label">Land Area</div>
+              <div className="overview-value">
+                {project.land_area || project.area || "—"}
+              </div>
+            </div>
+            <div className="overview-item">
+              <div className="overview-label">Handover</div>
+              <div className="overview-value">
+                {project.handover || project.possession || "—"}
+              </div>
+            </div>
+            <div className="overview-item">
+              <div className="overview-label">Blocks & Units</div>
+              <div className="overview-value">
+                {project.blocks ||
+                  (project.units ? `— | ${project.units} Units` : "—")}
+              </div>
+            </div>
+            <div className="overview-item">
+              <div className="overview-label">Floors</div>
+              <div className="overview-value">{project.floors || "—"}</div>
+            </div>
+            <div className="overview-item">
+              <div className="overview-label">Site Address</div>
+              <div className="overview-value">{project.address || "—"}</div>
+            </div>
+            <div className="overview-item">
+              <div className="overview-label">RERA Number</div>
+              <div className="overview-value">{project.rera || "—"}</div>
+            </div>
+          </div>
 
-<aside className="sidebar">
-  <h3>Highlights</h3>
-  <ul>{(project.highlights||[]).map((h,i)=><li key={i}>{h}</li>)}</ul>
+          <div className="overview-why">
+            <h3>Why Choose {project.title}</h3>
+            <p
+              dangerouslySetInnerHTML={{
+                __html:
+                  project.description ||
+                  project.long_description ||
+                  project.about ||
+                  "No description available.",
+              }}
+            />
+          </div>
+        </section>
 
-  <h3>Configurations</h3>
-  <div>
-    {(project.configurations||[]).map((c,i)=>((
-      <div key={i} className="config">
-        <strong>{c.type}</strong> — {c.size_min || ""}{c.size_min && c.size_max ? ` - ${c.size_max}` : ""} sqft
-        {c.price_min || c.price_max ? <div>Price: {c.price_min || "-"} - {c.price_max || "-"}</div> : null}
+        {/* Sidebar / Highlights */}
+        <aside className="sidebar wide-sidebar">
+          <div className="sidebar-inner">
+            <h3>Highlights</h3>
+            <ul>
+              {(project.highlights || []).map((h, i) => (
+                <li key={i}>{h}</li>
+              ))}
+            </ul>
+
+            <h3>Configurations</h3>
+            {(project.configurations || []).length > 0 ? (
+              <div className="config-table-wrapper">
+                <table className="config-table">
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Size (sqft)</th>
+                      <th>Price Range (in Lakh)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(project.configurations || []).map((c, i) => (
+                      <tr key={i}>
+                        <td>{c.type || "—"}</td>
+                        <td>
+                          {c.size_min && c.size_max
+                            ? `${c.size_min} - ${c.size_max}`
+                            : c.size_min || c.size_max || "—"}
+                        </td>
+                        <td>
+                          {c.price_min && c.price_max
+                            ? `${c.price_min} - ${c.price_max}`
+                            : c.price_min || c.price_max || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="no-config">No configurations available.</p>
+            )}
+          </div>
+        </aside>
       </div>
-    )))}
-  </div>
-</aside>
-      </div>
 
-      {project.gallery && project.gallery.length > 0 && (
-        <div className="gallery">
-        {project.gallery && project.gallery.map((g,i) =>
-  <img key={i} src={ getImageUrl(g) } alt={`${project.title}-${i}`} />)}
+      {/* Developer Details (Full Width Card) */}
+{project.developer_name && (
+  <section className="developer-card">
+    <h2>Developer Details</h2>
+    <div className="developer-card-inner">
+      {project.developer_logo && (
+        <div className="developer-card-logo">
+          <img
+            src={getImageUrl(project.developer_logo)}
+            alt={project.developer_name}
+          />
         </div>
       )}
 
-      <div style={{marginTop:24}}>
-        <Link to="/projects">← Back to Projects</Link>
+      <div className="developer-card-info">
+        <h3 className="developer-card-title">{project.developer_name}</h3>
+        <p className="developer-card-desc">
+          {project.developer_description || "Trusted real estate developer."}
+        </p>
       </div>
+    </div>
+  </section>
+)}
+
+
+      {/* Gallery */}
+      {gallery.length > 0 && (
+        <section className="gallery-section">
+          <h2 className="section-title">Gallery</h2>
+          <div className="gallery">
+            {gallery.map((g, i) => (
+              <img
+                key={i}
+                src={getImageUrl(g)}
+                alt={`${project.title}-${i}`}
+                onClick={() => setLightboxIndex(i)}
+                className="gallery-img"
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="back-btn-container">
+        <Link to="/projects" className="back-btn">
+          Back to Projects
+        </Link>
+      </div>
+
+      {/* Lightbox */}
+      {lightboxIndex !== null && (
+        <div
+          className="lightbox-overlay"
+          onClick={() => setLightboxIndex(null)}
+        >
+          <button
+            className="lightbox-close"
+            onClick={() => setLightboxIndex(null)}
+          >
+            ✕
+          </button>
+          <img
+            src={getImageUrl(gallery[lightboxIndex])}
+            alt="Fullscreen"
+            className="lightbox-image"
+          />
+          {gallery.length > 1 && (
+            <>
+              <button
+                className="lightbox-prev"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex(
+                    (lightboxIndex - 1 + gallery.length) % gallery.length
+                  );
+                }}
+              >
+                ‹
+              </button>
+              <button
+                className="lightbox-next"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex((lightboxIndex + 1) % gallery.length);
+                }}
+              >
+                ›
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -4,25 +4,104 @@ import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import "../../assets/pages/admin/ProjectForm.css";
 import { getImageUrl } from "../../lib/api";
+import Dropdown from "../../components/Dropdown";
 
-const emptyConfig = () => ({ type: "3 BHK", size_min: "", size_max: "", price_min: "", price_max: "" });
+const emptyConfig = () => ({
+  type: "3 BHK",
+  size_min: "",
+  size_max: "",
+  price_min: "",
+  price_max: "",
+});
 
 function safeParseJson(v, fallback = []) {
   if (Array.isArray(v)) return v;
   if (v === null || v === undefined || v === "") return fallback;
-  try { return JSON.parse(v); } catch { return fallback; }
+  try {
+    return JSON.parse(v);
+  } catch {
+    return fallback;
+  }
 }
 
 // Backend base: use localhost backend in dev, else same-origin
-const BACKEND_BASE = (typeof window !== "undefined" && window.location && window.location.hostname === "localhost") ? "http://localhost:5000" : "";
+const BACKEND_BASE =
+  typeof window !== "undefined" &&
+  window.location &&
+  window.location.hostname === "localhost"
+    ? "http://localhost:5000"
+    : "";
 
 export default function ProjectForm() {
   const { id } = useParams(); // "new" or numeric/id or slug
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const developerLogoModeRef = useRef(false);
+  const devLogoFileRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+    // New state for developers dropdown
+  const [developersList, setDevelopersList] = useState([]); // { name, logo, description }
+  const [developerSelected, setDeveloperSelected] = useState(""); // name or "custom"
+
+  // Fetch developer list: prefer /api/developers, fallback to scanning /api/projects
+  async function fetchDevelopersList() {
+    try {
+      let devs = [];
+      // Try dedicated endpoint first
+      let res = await fetch(`${BACKEND_BASE}/api/developers`);
+      if (res.ok) {
+        const body = await res.json().catch(()=>null);
+        // Expecting array of { name, logo, description } or objects with at least name
+        if (Array.isArray(body)) devs = body.map(d => ({
+          name: d.name || d.developer_name || "",
+          logo: d.logo || d.developer_logo || "",
+          description: d.description || d.developer_description || ""
+        }));
+      } else {
+        // Fallback: grab projects and extract developer fields
+        res = await fetch(`${BACKEND_BASE}/api/projects`);
+        if (!res.ok) throw new Error("projects endpoint failed");
+        const pj = await res.json().catch(()=>({ items: [] }));
+        const items = pj.items || pj || [];
+        const map = new Map();
+        for (const it of items) {
+          const name = (it.developer_name || it.developer || "").trim();
+          if (!name) continue;
+          if (!map.has(name)) {
+            map.set(name, {
+              name,
+              logo: it.developer_logo || it.logo || "",
+              description: it.developer_description || ""
+            });
+          }
+        }
+        devs = Array.from(map.values());
+      }
+
+      // Normalize & dedupe by name
+      const uniq = [];
+      const seen = new Set();
+      for (const d of devs) {
+        if (!d || !d.name) continue;
+        const key = d.name.trim();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        uniq.push({ name: key, logo: d.logo || "", description: d.description || "" });
+      }
+      setDevelopersList(uniq);
+    } catch (err) {
+      console.warn("Could not load developers list:", err);
+      setDevelopersList([]);
+    }
+  }
+
+  // load developers once on mount
+  useEffect(() => {
+    fetchDevelopersList();
+  }, []);
+
 
   const [form, setForm] = useState({
     title: "",
@@ -37,7 +116,7 @@ export default function ProjectForm() {
     highlights: [],
     amenities: [],
     gallery: [],
-    thumbnail: "",            // URL of selected thumbnail (new)
+    thumbnail: "", // URL of selected thumbnail (new)
     brochure_url: "",
     contact_phone: "",
     contact_email: "",
@@ -46,6 +125,11 @@ export default function ProjectForm() {
     blocks: "",
     units: "",
     floors: "",
+    land_area: "",
+    description: "",
+    developer_name: "",
+    developer_description: "",
+    developer_logo: "",
   });
 
   const [amenityText, setAmenityText] = useState("");
@@ -64,7 +148,9 @@ export default function ProjectForm() {
       setLoading(true);
       try {
         // Primary attempt: GET /api/projects/:id  (some servers use slug here)
-        let res = await fetch(`${BACKEND_BASE}/api/projects/${encodeURIComponent(id)}`);
+        let res = await fetch(
+          `${BACKEND_BASE}/api/projects/${encodeURIComponent(id)}`
+        );
         if (res.ok) {
           const data = await res.json();
           const p = data.project || data;
@@ -83,8 +169,8 @@ export default function ProjectForm() {
         const listJson = await listRes.json();
         const items = listJson.items || [];
         // find by id or slug
-        const byId = items.find(it => String(it.id) === String(id));
-        const bySlug = items.find(it => String(it.slug) === String(id));
+        const byId = items.find((it) => String(it.id) === String(id));
+        const bySlug = items.find((it) => String(it.slug) === String(id));
         const found = byId || bySlug;
         if (found) fillFormFromProject(found);
         else toast.error("Project not found");
@@ -103,10 +189,24 @@ export default function ProjectForm() {
     const gallery = safeParseJson(p.gallery, []);
     const highlights = safeParseJson(p.highlights, []);
     const amenities = safeParseJson(p.amenities, []);
-    const configs = safeParseJson(p.configurations, p.configurations && p.configurations.length ? p.configurations : [emptyConfig()]);
-    const price_info = (p.price_info && typeof p.price_info === "string") ? (() => { try { return JSON.parse(p.price_info); } catch { return p.price_info; } })() : p.price_info || null;
+    const configs = safeParseJson(
+      p.configurations,
+      p.configurations && p.configurations.length
+        ? p.configurations
+        : [emptyConfig()]
+    );
+    const price_info =
+      p.price_info && typeof p.price_info === "string"
+        ? (() => {
+            try {
+              return JSON.parse(p.price_info);
+            } catch {
+              return p.price_info;
+            }
+          })()
+        : p.price_info || null;
 
-    setForm(prev => ({
+    setForm((prev) => ({
       ...prev,
       title: p.title || "",
       slug: p.slug || "",
@@ -120,7 +220,9 @@ export default function ProjectForm() {
       highlights: Array.isArray(highlights) ? highlights : [],
       amenities: Array.isArray(amenities) ? amenities : [],
       gallery: Array.isArray(gallery) ? gallery : [],
-      thumbnail: p.thumbnail || (Array.isArray(gallery) && gallery.length ? gallery[0] : ""), // preserve thumbnail if exists else pick first image
+      thumbnail:
+        p.thumbnail ||
+        (Array.isArray(gallery) && gallery.length ? gallery[0] : ""), // preserve thumbnail if exists else pick first image
       brochure_url: p.brochure_url || "",
       contact_phone: p.contact_phone || "",
       contact_email: p.contact_email || "",
@@ -128,33 +230,66 @@ export default function ProjectForm() {
       blocks: p.blocks || "",
       units: p.units || "",
       floors: p.floors || "",
+      land_area: p.land_area || "",
+      description: p.description || "",
+      developer_name: p.developer_name || "",
+      developer_description: p.developer_description || "",
+      developer_logo: p.developer_logo || "",
     }));
   }
 
   // ---- helpers to update state ----
-  const setField = (field, value) => setForm(s => ({ ...s, [field]: value }));
-  const setConfigAt = (idx, obj) => setForm(s => ({ ...s, configurations: s.configurations.map((c, i) => (i === idx ? { ...c, ...obj } : c)) }));
+  const setField = (field, value) => setForm((s) => ({ ...s, [field]: value }));
+  const setConfigAt = (idx, obj) =>
+    setForm((s) => ({
+      ...s,
+      configurations: s.configurations.map((c, i) =>
+        i === idx ? { ...c, ...obj } : c
+      ),
+    }));
 
-  const addConfiguration = () => setForm(s => ({ ...s, configurations: [...s.configurations, emptyConfig()] }));
-  const removeConfiguration = (idx) => setForm(s => ({ ...s, configurations: s.configurations.filter((_, i) => i !== idx) }));
+  const addConfiguration = () =>
+    setForm((s) => ({
+      ...s,
+      configurations: [...s.configurations, emptyConfig()],
+    }));
+  const removeConfiguration = (idx) =>
+    setForm((s) => ({
+      ...s,
+      configurations: s.configurations.filter((_, i) => i !== idx),
+    }));
 
   const addAmenity = () => {
     const txt = amenityText.trim();
-    if (!txt) { toast.error("Amenity is empty"); return; }
-    setForm(s => ({ ...s, amenities: [...s.amenities, txt] }));
+    if (!txt) {
+      toast.error("Amenity is empty");
+      return;
+    }
+    setForm((s) => ({ ...s, amenities: [...s.amenities, txt] }));
     setAmenityText("");
     toast.success("Amenity added");
   };
-  const removeAmenity = (i) => setForm(s => ({ ...s, amenities: s.amenities.filter((_, idx) => idx !== i) }));
+  const removeAmenity = (i) =>
+    setForm((s) => ({
+      ...s,
+      amenities: s.amenities.filter((_, idx) => idx !== i),
+    }));
 
   const addHighlight = () => {
     const txt = highlightText.trim();
-    if (!txt) { toast.error("Highlight is empty"); return; }
-    setForm(s => ({ ...s, highlights: [...s.highlights, txt] }));
+    if (!txt) {
+      toast.error("Highlight is empty");
+      return;
+    }
+    setForm((s) => ({ ...s, highlights: [...s.highlights, txt] }));
     setHighlightText("");
     toast.success("Highlight added");
   };
-  const removeHighlight = (i) => setForm(s => ({ ...s, highlights: s.highlights.filter((_, idx) => idx !== i) }));
+  const removeHighlight = (i) =>
+    setForm((s) => ({
+      ...s,
+      highlights: s.highlights.filter((_, idx) => idx !== i),
+    }));
 
   // ---- image upload ----
   async function uploadFiles(files) {
@@ -166,7 +301,10 @@ export default function ProjectForm() {
       for (const file of Array.from(files)) {
         const formData = new FormData();
         formData.append("file", file);
-        const res = await fetch(`${BACKEND_BASE}/api/uploads`, { method: "POST", body: formData });
+        const res = await fetch(`${BACKEND_BASE}/api/uploads`, {
+          method: "POST",
+          body: formData,
+        });
         if (!res.ok) {
           const txt = await res.text().catch(() => String(res.status));
           console.error("Upload failed", res.status, txt);
@@ -181,17 +319,19 @@ export default function ProjectForm() {
         else if (typeof j === "string") uploadedUrls.push(j);
       }
 
-     if (uploadedUrls.length) {
-  setForm(s => {
-    const newGallery = [...s.gallery, ...uploadedUrls];
-    // if no thumbnail selected yet, pick the first newly uploaded or existing first
-    const thumbnail = s.thumbnail || newGallery[0] || "";
-    return { ...s, gallery: newGallery, thumbnail };
-  });
-  toast.success(`Uploaded ${uploadedUrls.length} image(s)`, { id: toastId });
-} else {
-  toast.dismiss(toastId);
-}
+      if (uploadedUrls.length) {
+        setForm((s) => {
+          const newGallery = [...s.gallery, ...uploadedUrls];
+          // if no thumbnail selected yet, pick the first newly uploaded or existing first
+          const thumbnail = s.thumbnail || newGallery[0] || "";
+          return { ...s, gallery: newGallery, thumbnail };
+        });
+        toast.success(`Uploaded ${uploadedUrls.length} image(s)`, {
+          id: toastId,
+        });
+      } else {
+        toast.dismiss(toastId);
+      }
       return uploadedUrls;
     } catch (err) {
       console.error("Upload error", err);
@@ -211,9 +351,10 @@ export default function ProjectForm() {
   };
 
   const removeGalleryItem = (i) => {
-    setForm(s => {
+    setForm((s) => {
       const newGallery = s.gallery.filter((_, idx) => idx !== i);
-      const newThumbnail = s.thumbnail === s.gallery[i] ? (newGallery[0] || "") : s.thumbnail;
+      const newThumbnail =
+        s.thumbnail === s.gallery[i] ? newGallery[0] || "" : s.thumbnail;
       return { ...s, gallery: newGallery, thumbnail: newThumbnail };
     });
     toast.success("Image removed");
@@ -221,7 +362,7 @@ export default function ProjectForm() {
 
   // set thumbnail by URL (image clicked or radio)
   const setThumbnail = (url) => {
-    setForm(s => ({ ...s, thumbnail: url }));
+    setForm((s) => ({ ...s, thumbnail: url }));
     toast.success("Thumbnail selected");
   };
 
@@ -233,28 +374,30 @@ export default function ProjectForm() {
     try {
       const res = await fetch(`${BACKEND_BASE}/api/uploads`); // assume this endpoint exists
       if (!res.ok) {
-        const txt = await res.text().catch(()=>"");
+        const txt = await res.text().catch(() => "");
         // try another common endpoint fallback
         console.warn("Primary /api/uploads failed:", res.status, txt);
         // attempt alternative endpoint
         const alt = await fetch(`${BACKEND_BASE}/uploads`); // maybe returns file listing as html (won't help) but try
         if (!alt.ok) throw new Error(`Uploads listing failed ${res.status}`);
       } else {
-        const body = await res.json().catch(()=>null);
+        const body = await res.json().catch(() => null);
         let arr = [];
         if (Array.isArray(body)) arr = body;
         else if (body && Array.isArray(body.files)) arr = body.files;
         else if (body && Array.isArray(body.items)) arr = body.items;
         else if (body && typeof body === "object") {
           // maybe object of { filename: path } pairs
-          arr = Object.values(body).filter(v => typeof v === "string");
+          arr = Object.values(body).filter((v) => typeof v === "string");
         }
         // normalize strings: prefix backend base if needed (getImageUrl does this)
         setUploadsList(arr);
       }
     } catch (err) {
       console.error("Failed to fetch uploads list:", err);
-      toast.error("Failed to load uploads list. Check backend endpoint /api/uploads");
+      toast.error(
+        "Failed to load uploads list. Check backend endpoint /api/uploads"
+      );
     } finally {
       setUploadsLoading(false);
     }
@@ -262,7 +405,7 @@ export default function ProjectForm() {
 
   // toggle selection in modal
   const toggleUploadSelect = (url) => {
-    setSelectedUploads(prev => {
+    setSelectedUploads((prev) => {
       const s = new Set(prev);
       if (s.has(url)) s.delete(url);
       else s.add(url);
@@ -272,8 +415,11 @@ export default function ProjectForm() {
 
   const addSelectedUploadsToGallery = () => {
     const picked = Array.from(selectedUploads);
-    if (picked.length === 0) { toast.error("No images selected"); return; }
-    setForm(s => {
+    if (picked.length === 0) {
+      toast.error("No images selected");
+      return;
+    }
+    setForm((s) => {
       const newGallery = [...s.gallery, ...picked];
       const thumbnail = s.thumbnail || newGallery[0] || "";
       return { ...s, gallery: newGallery, thumbnail };
@@ -298,7 +444,10 @@ export default function ProjectForm() {
       };
 
       const method = id && id !== "new" ? "PUT" : "POST";
-      const url = id && id !== "new" ? `${BACKEND_BASE}/api/projects/${id}` : `${BACKEND_BASE}/api/projects`;
+      const url =
+        id && id !== "new"
+          ? `${BACKEND_BASE}/api/projects/${id}`
+          : `${BACKEND_BASE}/api/projects`;
 
       const res = await fetch(url, {
         method,
@@ -333,54 +482,120 @@ export default function ProjectForm() {
         <div className="instructions">
           <h3>How to fill this form (quick guide)</h3>
           <ul>
-            <li><strong>Title</strong>: Name of the project (e.g. "DTC Skyler").</li>
-            <li><strong>Slug</strong>: URL friendly id (auto generated from Title if left empty).</li>
-            <li><strong>City / Location area</strong>: City and neighbourhood for search and listing cards.</li>
-            <li><strong>Address</strong>: Short address or landmark for displays.</li>
-            <li><strong>RERA</strong>: RERA number (if applicable).</li>
-            <li><strong>Configurations</strong>: Add unit types with sizes and price ranges.</li>
-            <li><strong>Amenities</strong>: Add features (Gym, Pool) one at a time.</li>
-            <li><strong>Highlights</strong>: Short selling bullets.</li>
-            <li><strong>Gallery</strong>: Upload images (jpg/png). After upload you can choose a thumbnail image for listing cards.</li>
-            <li><strong>Metadata</strong>: Blocks, Units, Floors (used on detail page).</li>
-            <li><strong>Thumbnail</strong>: The selected thumbnail is sent in the payload as <code>thumbnail</code>.</li>
+            <li>
+              <strong>Title</strong>: Name of the project (e.g. "DTC Skyler").
+            </li>
+            <li>
+              <strong>Slug</strong>: URL friendly id (auto generated from Title
+              if left empty).
+            </li>
+            <li>
+              <strong>City / Location area</strong>: City and neighbourhood for
+              search and listing cards.
+            </li>
+            <li>
+              <strong>Address</strong>: Short address or landmark for displays.
+            </li>
+            <li>
+              <strong>RERA</strong>: RERA number (if applicable).
+            </li>
+            <li>
+              <strong>Configurations</strong>: Add unit types with sizes and
+              price ranges.
+            </li>
+            <li>
+              <strong>Amenities</strong>: Add features (Gym, Pool) one at a
+              time.
+            </li>
+            <li>
+              <strong>Highlights</strong>: Short selling bullets.
+            </li>
+            <li>
+              <strong>Gallery</strong>: Upload images (jpg/png). After upload
+              you can choose a thumbnail image for listing cards.
+            </li>
+            <li>
+              <strong>Metadata</strong>: Blocks, Units, Floors (used on detail
+              page).
+            </li>
+            <li>
+              <strong>Thumbnail</strong>: The selected thumbnail is sent in the
+              payload as <code>thumbnail</code>.
+            </li>
           </ul>
         </div>
 
         <section className="grid-2">
           <label>
             Title *
-            <input value={form.title} onChange={(e) => setField("title", e.target.value)} placeholder="Project title" required />
+            <input
+              value={form.title}
+              onChange={(e) => setField("title", e.target.value)}
+              placeholder="Project title"
+              required
+            />
           </label>
 
           <label>
             Slug (optional)
-            <input value={form.slug} onChange={(e) => setField("slug", e.target.value)} placeholder="auto-generated-from-title" />
+            <input
+              value={form.slug}
+              onChange={(e) => setField("slug", e.target.value)}
+              placeholder="auto-generated-from-title"
+            />
           </label>
 
           <label>
             City *
-            <input value={form.city} onChange={(e) => setField("city", e.target.value)} placeholder="e.g. Kolkata" required />
+            <input
+              value={form.city}
+              onChange={(e) => setField("city", e.target.value)}
+              placeholder="e.g. Kolkata"
+              required
+            />
           </label>
 
           <label>
             Location area
-            <input value={form.location_area} onChange={(e) => setField("location_area", e.target.value)} placeholder="Joka / Salt Lake" />
+            <input
+              value={form.location_area}
+              onChange={(e) => setField("location_area", e.target.value)}
+              placeholder="Joka / Salt Lake"
+            />
           </label>
 
           <label className="full">
             Address
-            <textarea value={form.address} onChange={(e) => setField("address", e.target.value)} placeholder="Full/short address" />
+            <textarea
+              value={form.address}
+              onChange={(e) => setField("address", e.target.value)}
+              placeholder="Full/short address"
+            />
+          </label>
+          <label className="full">
+            Description
+            <textarea
+              value={form.description}
+              onChange={(e) => setField("description", e.target.value)}
+              placeholder="Full/short description"
+            />
           </label>
 
           <label>
             RERA / Reg. No.
-            <input value={form.rera} onChange={(e) => setField("rera", e.target.value)} placeholder="WBRERA/..." />
+            <input
+              value={form.rera}
+              onChange={(e) => setField("rera", e.target.value)}
+              placeholder="WBRERA/..."
+            />
           </label>
 
           <label>
             Status
-            <select value={form.status} onChange={(e) => setField("status", e.target.value)}>
+            <select
+              value={form.status}
+              onChange={(e) => setField("status", e.target.value)}
+            >
               <option>Active</option>
               <option>Under Construction</option>
               <option>Ready To Move</option>
@@ -390,7 +605,10 @@ export default function ProjectForm() {
 
           <label>
             Property type
-            <select value={form.property_type} onChange={(e) => setField("property_type", e.target.value)}>
+            <select
+              value={form.property_type}
+              onChange={(e) => setField("property_type", e.target.value)}
+            >
               <option>Residential</option>
               <option>Commercial</option>
             </select>
@@ -401,22 +619,65 @@ export default function ProjectForm() {
         <div className="panel">
           <div className="panel-header">
             <h4>Configurations</h4>
-            <small>Define unit types (e.g., 2 BHK / 3 BHK) with sizes and price ranges.</small>
+            <small>
+              Define unit types (e.g., 2 BHK / 3 BHK) with sizes and price
+              ranges.
+            </small>
           </div>
 
           <div className="configs">
             {form.configurations.map((c, idx) => (
               <div className="config-row" key={idx}>
-                <input className="cfg-type" value={c.type} onChange={(e) => setConfigAt(idx, { type: e.target.value })} />
-                <input className="cfg-small" placeholder="size min (sqft)" value={c.size_min} onChange={(e) => setConfigAt(idx, { size_min: e.target.value })} />
-                <input className="cfg-small" placeholder="size max (sqft)" value={c.size_max} onChange={(e) => setConfigAt(idx, { size_max: e.target.value })} />
-                <input className="cfg-small" placeholder="price min" value={c.price_min} onChange={(e) => setConfigAt(idx, { price_min: e.target.value })} />
-                <input className="cfg-small" placeholder="price max" value={c.price_max} onChange={(e) => setConfigAt(idx, { price_max: e.target.value })} />
-                <button type="button" className="btn small" onClick={() => removeConfiguration(idx)}>Remove</button>
+                <input
+                  className="cfg-type"
+                  value={c.type}
+                  onChange={(e) => setConfigAt(idx, { type: e.target.value })}
+                />
+                <input
+                  className="cfg-small"
+                  placeholder="size min (sqft)"
+                  value={c.size_min}
+                  onChange={(e) =>
+                    setConfigAt(idx, { size_min: e.target.value })
+                  }
+                />
+                <input
+                  className="cfg-small"
+                  placeholder="size max (sqft)"
+                  value={c.size_max}
+                  onChange={(e) =>
+                    setConfigAt(idx, { size_max: e.target.value })
+                  }
+                />
+                <input
+                  className="cfg-small"
+                  placeholder="price min"
+                  value={c.price_min}
+                  onChange={(e) =>
+                    setConfigAt(idx, { price_min: e.target.value })
+                  }
+                />
+                <input
+                  className="cfg-small"
+                  placeholder="price max"
+                  value={c.price_max}
+                  onChange={(e) =>
+                    setConfigAt(idx, { price_max: e.target.value })
+                  }
+                />
+                <button
+                  type="button"
+                  className="btn small"
+                  onClick={() => removeConfiguration(idx)}
+                >
+                  Remove
+                </button>
               </div>
             ))}
             <div style={{ marginTop: 8 }}>
-              <button type="button" onClick={addConfiguration} className="btn">+ Add configuration</button>
+              <button type="button" onClick={addConfiguration} className="btn">
+                + Add configuration
+              </button>
             </div>
           </div>
         </div>
@@ -424,30 +685,52 @@ export default function ProjectForm() {
         {/* Amenities & highlights */}
         <div className="grid-2">
           <div className="panel">
-            <div className="panel-header"><h4>Amenities</h4></div>
+            <div className="panel-header">
+              <h4>Amenities</h4>
+            </div>
             <div className="chip-row">
-              <input value={amenityText} onChange={(e) => setAmenityText(e.target.value)} placeholder="e.g. Gymnasium" />
-              <button type="button" className="btn" onClick={addAmenity}>Add Amenity</button>
+              <input
+                value={amenityText}
+                onChange={(e) => setAmenityText(e.target.value)}
+                placeholder="e.g. Gymnasium"
+              />
+              <button type="button" className="btn" onClick={addAmenity}>
+                Add Amenity
+              </button>
             </div>
             <div className="chips">
               {form.amenities.map((a, i) => (
                 <span className="chip" key={i}>
-                  {a} <button type="button" onClick={() => removeAmenity(i)}>×</button>
+                  {a}{" "}
+                  <button type="button" onClick={() => removeAmenity(i)}>
+                    ×
+                  </button>
                 </span>
               ))}
             </div>
           </div>
 
           <div className="panel">
-            <div className="panel-header"><h4>Highlights</h4></div>
+            <div className="panel-header">
+              <h4>Highlights</h4>
+            </div>
             <div className="chip-row">
-              <input value={highlightText} onChange={(e) => setHighlightText(e.target.value)} placeholder="e.g. Near Metro" />
-              <button type="button" className="btn" onClick={addHighlight}>Add Highlight</button>
+              <input
+                value={highlightText}
+                onChange={(e) => setHighlightText(e.target.value)}
+                placeholder="e.g. Near Metro"
+              />
+              <button type="button" className="btn" onClick={addHighlight}>
+                Add Highlight
+              </button>
             </div>
             <div className="chips">
               {form.highlights.map((h, i) => (
                 <span className="chip" key={i}>
-                  {h} <button type="button" onClick={() => removeHighlight(i)}>×</button>
+                  {h}{" "}
+                  <button type="button" onClick={() => removeHighlight(i)}>
+                    ×
+                  </button>
                 </span>
               ))}
             </div>
@@ -458,12 +741,30 @@ export default function ProjectForm() {
         <div className="panel">
           <div className="panel-header">
             <h4>Gallery</h4>
-            <small>Upload images (jpg/png). Select one image as listing thumbnail.</small>
+            <small>
+              Upload images (jpg/png). Select one image as listing thumbnail.
+            </small>
           </div>
 
-          <div className="uploader-row" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={onFileChange} style={{ display: "none" }} />
-            <button type="button" className="btn" onClick={() => fileInputRef.current?.click()}>{uploading ? "Uploading..." : "Select & Upload"}</button>
+          <div
+            className="uploader-row"
+            style={{ display: "flex", gap: 8, alignItems: "center" }}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={onFileChange}
+              style={{ display: "none" }}
+            />
+            <button
+              type="button"
+              className="btn"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploading ? "Uploading..." : "Select & Upload"}
+            </button>
 
             {/* New button: select existing uploads */}
             <button
@@ -483,7 +784,7 @@ export default function ProjectForm() {
             {form.gallery.map((g, i) => (
               <div key={i} className="gallery-item">
                 <div className="gallery-thumb-wrap">
-                  <img src={ getImageUrl(g) } alt={`gallery-${i}`} />
+                  <img src={getImageUrl(g)} alt={`gallery-${i}`} />
                   <div className="gallery-controls">
                     <label className="thumb-radio">
                       <input
@@ -494,166 +795,482 @@ export default function ProjectForm() {
                       />
                       <span>Thumbnail</span>
                     </label>
-                    <button type="button" className="remove" onClick={() => removeGalleryItem(i)}>Remove</button>
+                    <button
+                      type="button"
+                      className="remove"
+                      onClick={() => removeGalleryItem(i)}
+                    >
+                      Remove
+                    </button>
                   </div>
                 </div>
               </div>
             ))}
-            {form.gallery.length === 0 && <div className="placeholder">No images yet.</div>}
+            {form.gallery.length === 0 && (
+              <div className="placeholder">No images yet.</div>
+            )}
           </div>
         </div>
+       {/* Developer Info */}
+<div className="panel">
+  <div className="panel-header">
+    <h4>Developer Info</h4>
+    <small>Enter details about the developer / builder. Pick from existing to autofill.</small>
+  </div>
+
+  {/* Developer selector */}
+    {/* Developer selector using custom Dropdown */}
+  <div style={{ marginBottom: 12 }}>
+    <label style={{ display: "block", marginBottom: 8, fontWeight: 700, color: "var(--muted)" }}>
+      Select existing developer
+    </label>
+
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <Dropdown
+        id="developer-dropdown"
+        value={developerSelected}
+        onChange={(val) => {
+          // val is developer name or "" for 'All'
+          setDeveloperSelected(val || ""); // store empty string if cleared
+          if (!val || val === "" || val === "__empty__" || val === "custom") {
+            // user cleared or selected custom
+            setField("developer_name", "");
+            setField("developer_logo", "");
+            setField("developer_description", "");
+            return;
+          }
+          // find developer object and autofill fields
+          const d = developersList.find(x => x.name === val);
+          if (d) {
+            setField("developer_name", d.name || "");
+            if (d.logo) setField("developer_logo", d.logo);
+            if (d.description) setField("developer_description", d.description);
+          }
+        }}
+        options={[
+          // convert developersList to labelled options (value=developer name)
+          ...developersList.map(d => ({ value: d.name, label: d.name })),
+          // add a "Manual / Other" option at the end
+          { value: "custom", label: "Other / Manual" }
+        ]}
+        placeholder="— Select developer —"
+        className="developer-dropdown"
+      />
+
+      <button type="button" className="btn" onClick={() => fetchDevelopersList()} title="Refresh list">Refresh</button>
+      <small style={{ color:"#777" }}>or choose "Other / Manual" to type new developer</small>
+    </div>
+  </div>
+
+
+  <div className="grid-2">
+    <label>
+      Developer Name
+      <input
+        value={form.developer_name}
+        onChange={(e) => { setField("developer_name", e.target.value); setDeveloperSelected("custom"); }}
+        placeholder="e.g. ABC Developers"
+      />
+    </label>
+
+    <label className="full">
+      Developer Logo
+      <div className="uploader-row" style={{ gap: "8px", flexWrap: "wrap" }}>
+        {/* Upload from local (dev logo file ref) */}
+        <button
+          type="button"
+          className="btn"
+          onClick={() => devLogoFileRef.current?.click()}
+        >
+          Upload Logo (PNG)
+        </button>
+
+        {/* Select from saved uploads (opens modal, now marks modal for developer mode) */}
+        <button
+          type="button"
+          className="btn"
+          onClick={async () => {
+            developerLogoModeRef.current = true;
+            setShowUploadsModal(true);
+            await fetchUploadsList();
+          }}
+        >
+          Select from uploads
+        </button>
+
+        {/* Manual paste/link */}
+        <input
+          type="text"
+          value={form.developer_logo}
+          onChange={(e) => { setField("developer_logo", e.target.value); setDeveloperSelected("custom"); }}
+          placeholder="or paste image URL (https://...)"
+          style={{ flex: "1 1 auto", minWidth: "220px" }}
+        />
+
+        {/* Hidden PNG-only input (already exists in your code) */}
+        <input
+          ref={devLogoFileRef}
+          type="file"
+          accept=".png,image/png"
+          style={{ display: "none" }}
+          onChange={async (e) => {
+            const files = e.target.files;
+            if (!files || files.length === 0) return;
+            const [file] = files;
+            const isPng =
+              file.type?.toLowerCase() === "image/png" ||
+              file.name?.toLowerCase().endsWith(".png");
+            if (!isPng) {
+              toast.error("Only PNG files are allowed for the developer logo.");
+              e.target.value = null;
+              return;
+            }
+            const uploaded = await uploadFiles([file], { silent: true });
+            if (uploaded.length) {
+              setField("developer_logo", uploaded[0]);
+              toast.success("Developer logo uploaded successfully (PNG)");
+            }
+            setDeveloperSelected("custom");
+            e.target.value = null;
+          }}
+        />
+      </div>
+
+      {form.developer_logo && (
+        <div className="developer-logo-preview">
+          <img src={getImageUrl(form.developer_logo)} alt="Developer Logo" />
+          <button
+            type="button"
+            className="remove"
+            onClick={() => { setField("developer_logo", ""); setDeveloperSelected("custom"); }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+    </label>
+  </div>
+
+  <label className="full">
+    Developer Description
+    <textarea
+      value={form.developer_description}
+      onChange={(e) => { setField("developer_description", e.target.value); setDeveloperSelected("custom"); }}
+      placeholder="Short developer profile or tagline"
+    />
+  </label>
+</div>
+
 
         {/* metadata fields + contact/brochure */}
         <section className="grid-2">
           <label>
             Blocks
-            <input value={form.blocks} onChange={(e) => setField("blocks", e.target.value)} placeholder="e.g. A, B, C or 2" />
+            <input
+              value={form.blocks}
+              onChange={(e) => setField("blocks", e.target.value)}
+              placeholder="e.g. A, B, C or 2"
+            />
           </label>
 
           <label>
             Units
-            <input value={form.units} onChange={(e) => setField("units", e.target.value)} placeholder="Total units (number)" />
+            <input
+              value={form.units}
+              onChange={(e) => setField("units", e.target.value)}
+              placeholder="Total units (number)"
+            />
           </label>
 
           <label>
             Floors
-            <input value={form.floors} onChange={(e) => setField("floors", e.target.value)} placeholder="Number of floors" />
+            <input
+              value={form.floors}
+              onChange={(e) => setField("floors", e.target.value)}
+              placeholder="Number of floors"
+            />
+          </label>
+
+          <label>
+            Land Area
+            <input
+              value={form.land_area}
+              onChange={(e) => setField("land_area", e.target.value)}
+              placeholder="What is the land_area"
+            />
           </label>
 
           <label>
             Brochure URL
-            <input value={form.brochure_url} onChange={(e) => setField("brochure_url", e.target.value)} placeholder="https://..." />
+            <input
+              value={form.brochure_url}
+              onChange={(e) => setField("brochure_url", e.target.value)}
+              placeholder="https://..."
+            />
           </label>
 
           <label>
             Price info (JSON optional)
-            <input value={form.price_info ? JSON.stringify(form.price_info) : ""} onChange={(e) => {
-              try { setField("price_info", e.target.value ? JSON.parse(e.target.value) : null); } catch { }
-            }} placeholder='e.g. [{"type":"3 BHK","price_min":"1.2 Cr","price_max":"1.6 Cr"}]' />
+            <input
+              value={form.price_info ? JSON.stringify(form.price_info) : ""}
+              onChange={(e) => {
+                try {
+                  setField(
+                    "price_info",
+                    e.target.value ? JSON.parse(e.target.value) : null
+                  );
+                } catch {}
+              }}
+              placeholder='e.g. [{"type":"3 BHK","price_min":"1.2 Cr","price_max":"1.6 Cr"}]'
+            />
           </label>
 
           <label>
             Contact phone
-            <input value={form.contact_phone} onChange={(e) => setField("contact_phone", e.target.value)} placeholder="+91..." />
+            <input
+              value={form.contact_phone}
+              onChange={(e) => setField("contact_phone", e.target.value)}
+              placeholder="+91..."
+            />
           </label>
 
           <label>
             Contact email
-            <input type="email" value={form.contact_email} onChange={(e) => setField("contact_email", e.target.value)} placeholder="sales@example.com" />
+            <input
+              type="email"
+              value={form.contact_email}
+              onChange={(e) => setField("contact_email", e.target.value)}
+              placeholder="sales@example.com"
+            />
           </label>
         </section>
 
         <div className="form-actions" style={{ marginTop: 18 }}>
-          <button type="submit" className="btn primary" disabled={loading}>{loading ? "Saving..." : "Save Project"}</button>
-          <button type="button" className="btn" onClick={() => navigate("/admin/projects")} disabled={loading}>Cancel</button>
+          <button type="submit" className="btn" disabled={loading}>
+            {loading ? "Saving..." : "Save Project"}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => navigate("/admin/projects")}
+            disabled={loading}
+          >
+            Cancel
+          </button>
         </div>
       </form>
 
       {/* -------- Uploads modal (select existing) -------- */}
-     {showUploadsModal && (
-  <div className="modal-backdrop" onClick={() => setShowUploadsModal(false)}>
-    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <h3 style={{ margin: 0 }}>Select images from uploads</h3>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn" onClick={() => { setSelectedUploads(new Set()); }}>Clear</button>
-          <button className="btn" onClick={() => setShowUploadsModal(false)}>Close</button>
-        </div>
-      </div>
-
-      <div style={{ marginBottom: 10 }}>
-        {uploadsLoading ? (
-          <div>Loading images…</div>
-        ) : uploadsList.length === 0 ? (
-          <div style={{ color: "#666" }}>No uploads found on server (endpoint /api/uploads).</div>
-        ) : null}
-      </div>
-
-      <div className="uploads-grid">
-        {uploadsList.map((u, idx) => {
-          const url = getImageUrl(u) || u;
-
-          const normalizePath = (p) => {
-            if (!p) return "";
-            let s = String(p).trim();
-            // remove backend base for consistent comparison
-            if (typeof BACKEND_BASE === "string" && BACKEND_BASE && s.startsWith(BACKEND_BASE)) {
-              s = s.replace(BACKEND_BASE, "");
-            }
-            if (!s.startsWith("/")) s = "/" + s;
-            return s;
-          };
-
-          const inGallery = form.gallery.some(g => normalizePath(g) === normalizePath(u));
-          const isThumbnail = normalizePath(form.thumbnail) === normalizePath(u);
-          const isSelected = selectedUploads.has(u);
-          const disabled = inGallery;
-
-          return (
+      {showUploadsModal && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setShowUploadsModal(false)}
+        >
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div
-              key={idx}
-              className={`image-card ${disabled ? "disabled" : ""} ${isSelected ? "selected" : ""}`}
-              onClick={() => { if (!disabled) toggleUploadSelect(u); }}
-              title={disabled ? "Already added to gallery" : (isSelected ? "Click to unselect" : "Click to select")}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 8,
+              }}
             >
-              <div className="media">
-                <img src={url} alt={`upload-${idx}`} />
-              </div>
-
-              <div className="meta">
-                <label className="select-label">
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={(e) => { if (!disabled) toggleUploadSelect(u); }}
-                    disabled={disabled}
-                  />
-                  <span>{disabled ? "In gallery" : "Select"}</span>
-                </label>
-
-                {isThumbnail && <span className="thumb-badge">✓ Thumbnail</span>}
+              <h3 style={{ margin: 0 }}>Select images from uploads</h3>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  className="btn"
+                  onClick={() => {
+                    setSelectedUploads(new Set());
+                  }}
+                >
+                  Clear
+                </button>
+                <button
+                  className="btn"
+                  onClick={() => setShowUploadsModal(false)}
+                >
+                  Close
+                </button>
               </div>
             </div>
-          );
-        })}
-      </div>
 
-      <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 8 }}>
-        <button className="btn" onClick={() => setShowUploadsModal(false)}>Cancel</button>
-        <button
-          className="btn primary"
-          onClick={() => {
-            // deduplicate and add
-            const picked = Array.from(selectedUploads || []);
-            if (picked.length === 0) { toast.error("No images selected"); return; }
-            setForm(s => {
-              // normalize by keeping original string paths, but dedupe
-              const combined = [...(s.gallery || []), ...picked];
-              const unique = Array.from(new Set(combined));
-              const thumbnail = s.thumbnail || unique[0] || "";
-              return { ...s, gallery: unique, thumbnail };
-            });
-            // clear selection and close
-            setSelectedUploads(new Set());
-            setShowUploadsModal(false);
-            toast.success(`Added ${picked.length} image(s) to gallery`);
-          }}
-          disabled={(selectedUploads && selectedUploads.size === 0)}
-        >
-          Add selected ({selectedUploads ? selectedUploads.size : 0})
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+            <div style={{ marginBottom: 10 }}>
+              {uploadsLoading ? (
+                <div>Loading images…</div>
+              ) : uploadsList.length === 0 ? (
+                <div style={{ color: "#666" }}>
+                  No uploads found on server (endpoint /api/uploads).
+                </div>
+              ) : null}
+            </div>
+
+            <div className="uploads-grid">
+              {uploadsList.map((u, idx) => {
+                const url = getImageUrl(u) || u;
+
+                const normalizePath = (p) => {
+                  if (!p) return "";
+                  let s = String(p).trim();
+                  // remove backend base for consistent comparison
+                  if (
+                    typeof BACKEND_BASE === "string" &&
+                    BACKEND_BASE &&
+                    s.startsWith(BACKEND_BASE)
+                  ) {
+                    s = s.replace(BACKEND_BASE, "");
+                  }
+                  if (!s.startsWith("/")) s = "/" + s;
+                  return s;
+                };
+
+                const inGallery = form.gallery.some(
+                  (g) => normalizePath(g) === normalizePath(u)
+                );
+                const isThumbnail =
+                  normalizePath(form.thumbnail) === normalizePath(u);
+                const isSelected = selectedUploads.has(u);
+                const disabled = inGallery;
+
+                return (
+                  <div
+                    key={idx}
+                    className={`image-card ${disabled ? "disabled" : ""} ${
+                      isSelected ? "selected" : ""
+                    }`}
+                    onClick={() => {
+                      if (!disabled) toggleUploadSelect(u);
+                    }}
+                    title={
+                      disabled
+                        ? "Already added to gallery"
+                        : isSelected
+                        ? "Click to unselect"
+                        : "Click to select"
+                    }
+                  >
+                    <div className="media">
+                      <img src={url} alt={`upload-${idx}`} />
+                    </div>
+
+                    <div className="meta">
+                      <label className="select-label">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            if (!disabled) toggleUploadSelect(u);
+                          }}
+                          disabled={disabled}
+                        />
+                        <span>{disabled ? "In gallery" : "Select"}</span>
+                      </label>
+
+                      {isThumbnail && (
+                        <span className="thumb-badge">✓ Thumbnail</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div
+              style={{
+                marginTop: 12,
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 8,
+              }}
+            >
+              <button
+                className="btn"
+                onClick={() => setShowUploadsModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn primary"
+                onClick={() => {
+                  const picked = Array.from(selectedUploads || []);
+                  if (picked.length === 0) {
+                    toast.error("No images selected");
+                    return;
+                  }
+
+                  // Detect whether modal is used for developer logo or gallery
+                  if (developerLogoModeRef.current) {
+                    const first = picked[0];
+                    setField("developer_logo", first);
+                    toast.success("Developer logo set from uploads");
+                    developerLogoModeRef.current = false;
+                    setShowUploadsModal(false);
+                    return;
+                  }
+
+                  // Default = gallery mode
+                  setForm((s) => {
+                    const combined = [...(s.gallery || []), ...picked];
+                    const unique = Array.from(new Set(combined));
+                    const thumbnail = s.thumbnail || unique[0] || "";
+                    return { ...s, gallery: unique, thumbnail };
+                  });
+                  setSelectedUploads(new Set());
+                  setShowUploadsModal(false);
+                  toast.success(`Added ${picked.length} image(s) to gallery`);
+                }}
+                disabled={selectedUploads && selectedUploads.size === 0}
+              >
+                Add selected ({selectedUploads ? selectedUploads.size : 0})
+              </button>
+              <button
+                className="btn primary"
+                onClick={() => {
+                  // deduplicate and add
+                  const picked = Array.from(selectedUploads || []);
+                  if (picked.length === 0) {
+                    toast.error("No images selected");
+                    return;
+                  }
+                  setForm((s) => {
+                    // normalize by keeping original string paths, but dedupe
+                    const combined = [...(s.gallery || []), ...picked];
+                    const unique = Array.from(new Set(combined));
+                    const thumbnail = s.thumbnail || unique[0] || "";
+                    return { ...s, gallery: unique, thumbnail };
+                  });
+                  // clear selection and close
+                  setSelectedUploads(new Set());
+                  setShowUploadsModal(false);
+                  toast.success(`Added ${picked.length} image(s) to gallery`);
+                }}
+                disabled={selectedUploads && selectedUploads.size === 0}
+              >
+                Add selected ({selectedUploads ? selectedUploads.size : 0})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // minimal inline styles for modal (you can move to CSS file)
 const backdropStyle = {
-  position: "fixed", inset: 0, background: "rgba(10,10,10,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999
+  position: "fixed",
+  inset: 0,
+  background: "rgba(10,10,10,0.45)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 9999,
 };
 const modalStyle = {
-  width: "min(1100px, 96%)", maxHeight: "88vh", overflow: "hidden", background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
+  width: "min(1100px, 96%)",
+  maxHeight: "88vh",
+  overflow: "hidden",
+  background: "#fff",
+  borderRadius: 12,
+  padding: 16,
+  boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
 };

@@ -21,7 +21,7 @@ function showDeleteConfirm({ title = "Delete project?", message = "This action c
   const id = toast.custom((t) => (
     <div
       style={{
-        background: "#fff",
+        background: "#F2E8E4",
         color: "#0f1720",
         padding: 14,
         borderRadius: 10,

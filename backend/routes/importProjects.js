@@ -188,6 +188,11 @@ router.post("/", upload.fields([{ name: "file", maxCount: 1 }, { name: "images_z
         blocks: r.blocks || null,
         units: r.units || null,
         floors: r.floors || null,
+        land_area: r.land_area || null,
+        description: r.description || null,
+        developer_name: r.developer_name || null,
+        developer_logo: r.developer_logo || null,
+        developer_description: r.developer_description || null,
         highlights: (() => {
           if (!r.highlights) return [];
           if (Array.isArray(r.highlights)) return r.highlights;
@@ -219,9 +224,9 @@ router.post("/", upload.fields([{ name: "file", maxCount: 1 }, { name: "images_z
 
       const sql = `INSERT INTO projects
         (slug, title, location_area, city, address, rera, status, property_type,
-         configurations, blocks, units, floors, highlights, amenities, gallery, thumbnail,
+         configurations, blocks, units, floors, land_area, description, developer_name,developer_logo, developer_description, highlights, amenities, gallery, thumbnail,
          brochure_url, contact_phone, contact_email, price_info, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`;
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`;
 
       const params = [
         slugVal,
@@ -236,6 +241,11 @@ router.post("/", upload.fields([{ name: "file", maxCount: 1 }, { name: "images_z
         project.blocks,
         project.units,
         project.floors,
+        project.land_area,
+        project.description,
+        project.developer_name,
+        project.developer_logo,
+        project.developer_description,
         JSON.stringify(project.highlights || []),
         JSON.stringify(project.amenities || []),
         JSON.stringify(project.gallery || []),

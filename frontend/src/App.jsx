@@ -21,7 +21,7 @@ import ImportProjects from "./pages/admin/ImportProjects";
 export default function App() {
   return (
     <Router>
-      <div className="min-h-screen bg-gray-50 text-gray-900">
+      <div style={{"background": "#F2E8E4"}}>
         <Toaster position="top-center" />
         <Header />
 

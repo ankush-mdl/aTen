@@ -120,6 +120,11 @@ router.post("/", (req, res) => {
     blocks: body.blocks || null,
     units: body.units || null,
     floors: body.floors || null,
+    land_area: body.land_area || null,
+    description: body.description || null,
+    developer_name: body.developer_name || null,
+    developer_logo: body.developer_logo || null,
+    developer_description: body.developer_description || null,
     highlights: JSON.stringify(body.highlights || []),
     amenities: JSON.stringify(body.amenities || []),
     gallery: JSON.stringify(body.gallery || []),
@@ -132,9 +137,9 @@ router.post("/", (req, res) => {
 
   const sql = `INSERT INTO projects
     (slug, title, location_area, city, address, rera, status, property_type,
-     configurations, blocks, units, floors, highlights, amenities, gallery, thumbnail,
+     configurations, blocks, units, floors, land_area, description, developer_name, developer_logo, developer_description, highlights, amenities, gallery, thumbnail,
      brochure_url, contact_phone, contact_email, price_info, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`;
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`;
 
   const params = [
     data.slug,
@@ -149,6 +154,11 @@ router.post("/", (req, res) => {
     data.blocks,
     data.units,
     data.floors,
+    data.land_area,
+    data.description,
+    data.developer_name,
+    data.developer_logo,
+    data.developer_description,
     data.highlights,
     data.amenities,
     data.gallery,
@@ -181,7 +191,7 @@ router.put("/:id", (req, res) => {
 
   const sql = `UPDATE projects SET
     slug = ?, title = ?, location_area = ?, city = ?, address = ?, rera = ?, status = ?, property_type = ?,
-    configurations = ?, blocks = ?, units = ?, floors = ?, highlights = ?, amenities = ?,
+    configurations = ?, blocks = ?, units = ?, floors = ?, land_area=?, description=?,developer_name=?, developer_logo=?, developer_description=?, highlights = ?, amenities = ?,
     gallery = ?, thumbnail = ?, brochure_url = ?, contact_phone = ?, contact_email = ?, price_info = ?, updated_at = datetime('now')
     WHERE id = ?`;
 
@@ -198,6 +208,11 @@ router.put("/:id", (req, res) => {
     body.blocks || null,
     body.units || null,
     body.floors || null,
+    body.land_area || null,
+    body.description || null,
+    body.developer_name || null, 
+    body.developer_logo || null, 
+    body.developer_description || null,
     JSON.stringify(body.highlights || []),
     JSON.stringify(body.amenities || []),
     JSON.stringify(body.gallery || []),

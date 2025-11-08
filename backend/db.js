@@ -88,6 +88,11 @@ db.run(`
     blocks TEXT,
     units TEXT,
     floors TEXT,
+    land_area TEXT,
+    description TEXT,
+    developer_name TEXT,
+    developer_logo TEXT,
+    developer_description TEXT,
     highlights TEXT, /* JSON array of strings */
     amenities TEXT,  /* JSON array of strings */
     gallery TEXT,    /* JSON array of image URLs */

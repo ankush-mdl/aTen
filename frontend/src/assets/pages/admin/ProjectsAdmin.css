@@ -47,9 +47,9 @@
 .btn{
   display:inline-block;
   padding:8px 10px;
-  border-radius:8px;
+  border-radius:2px;
   background:var(--accent);
-  color:white;
+  color: #f6f8f8;
   text-decoration:none;
 }
 
@@ -73,13 +73,12 @@
   display: block;
   padding: 8px 10px;
   border-radius: 8px;
-  color: #334155;
+  color: #F2E8E4;
   text-decoration: none;
   font-weight: 600;
   margin: 4px 0;
 }
 .admin-nav-link.active {
-  background: linear-gradient(90deg, #2b6cb0, #2563eb);
-  color: #fff;
+  background: #BFADA3;
   box-shadow: 0 8px 24px rgba(37,99,235,0.12);
 }
