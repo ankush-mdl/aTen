@@ -28,7 +28,14 @@ const UPLOADS_DIR = path.join(__dirname, "uploads");
 app.use("/uploads", express.static(UPLOADS_DIR, { maxAge: "7d" }));
 
 // ✅ CORS with env support
-app.use(cors())
+app.use(cors({
+  origin: [
+    process.env.FRONTEND_ORIGIN,
+    process.env.SECOND_ORIGIN
+  ].filter(Boolean),
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+}));
 
 app.use(bodyParser.json());
 
