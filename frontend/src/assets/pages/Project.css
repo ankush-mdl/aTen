@@ -245,62 +245,151 @@
     background-position: right 12px center;
   }
 }
-/* Dropdown component styles (theme-matching) */
-.dropdown-wrap { min-width: 160px; display:inline-block; z-index:2000; }
+/* -------------------------
+   Dropdown component styles
+   (supports single + multi-select)
+   ------------------------- */
+
+.dropdown-wrap {
+  min-width: 160px;
+  display: inline-block;
+  z-index: 2000;               /* elevated so dropdown overlays other UI */
+  position: relative;
+  font-family: inherit;
+}
+
+/* Button that opens the list */
 .dropdown-btn {
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  width:100%;
-  padding:10px 14px;
-  border-radius:10px;
-  border:1px solid rgba(15,23,30,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(15,23,30,0.06);
   background: linear-gradient(180deg,#ffffff,#fbfcfd);
   color: var(--accent);
-  font-size:0.95rem;
-  cursor:pointer;
+  font-size: 0.95rem;
+  cursor: pointer;
   transition: box-shadow .12s ease, transform .12s ease, border-color .12s ease;
+  text-align: left;
+  box-sizing: border-box;
 }
 .dropdown-btn:hover { box-shadow: 0 8px 18px rgba(64,60,52,0.04); transform: translateY(-2px); }
 .dropdown-btn:focus { outline: 3px solid rgba(11,114,133,0.08); outline-offset: 2px; }
 
+/* Label inside the button */
 .dropdown-label.muted { color: #8e8b85; }
-.dropdown-arrow { font-size: 0.9rem; opacity:0.8; }
+.dropdown-arrow { font-size: 0.9rem; opacity: 0.8; margin-left: 8px; }
 
+/* The floating list */
 .dropdown-list {
   position: absolute;
   top: calc(100% + 8px);
   left: 0;
   width: 100%;
   max-height: 320px;
-  overflow:auto;
+  overflow: auto;
   background: #ffffff;
   border-radius: 10px;
   box-shadow: 0 10px 40px rgba(18,28,34,0.12);
   border: 1px solid rgba(15,23,30,0.06);
-  padding: 6px;
-  list-style:none;
-  margin:0;
+  padding: 8px;
+  list-style: none;
+  margin: 0;
+  box-sizing: border-box;
 }
 
+/* scrollbar styling */
+.dropdown-list::-webkit-scrollbar { width: 10px; height: 10px; }
+.dropdown-list::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(64,60,52,0.07), rgba(64,60,52,0.04));
+  border-radius: 8px;
+  border: 2px solid rgba(255,255,255,0.0);
+}
+.dropdown-list::-webkit-scrollbar-track { background: transparent; }
+
+/* Each option */
 .dropdown-item {
   padding: 8px 12px;
-  border-radius:8px;
-  display:flex;
-  align-items:center;
-  cursor:pointer;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  gap: 8px;
+  transition: background .12s ease, transform .08s ease;
 }
-.dropdown-item + .dropdown-item { margin-top:6px; }
+.dropdown-item + .dropdown-item { margin-top: 6px; }
 
-.dropdown-item:hover { background: rgba(11,114,133,0.06); }
-.dropdown-item.selected { background: rgba(11,114,133,0.08); font-weight:700; }
+/* hover / selected states */
+.dropdown-item:hover { background: rgba(11,114,133,0.06); transform: translateY(-1px); }
+.dropdown-item.selected,
+.dropdown-item[aria-selected="true"] {
+  background: rgba(11,114,133,0.08);
+  font-weight: 700;
+}
 
-.dropdown-item-label { font-size:0.95rem; color:var(--accent); }
-.dropdown-item .muted { color:#8e8b85; font-weight:600; }
+/* label & muted text inside an option */
+.dropdown-item-label { font-size: 0.95rem; color: var(--accent); display:flex; align-items:center; gap:8px; width:100%; }
+.dropdown-item .muted { color: #8e8b85; font-weight: 600; }
 
-/* ensure it looks good on small screens */
-@media (max-width:760px) {
-  .dropdown-wrap { width:100%; }
+/* checkbox for multi-select
+   - use accent-color so checkbox respects your theme
+   - keep checkbox small & clean
+*/
+.dropdown-item input[type="checkbox"] {
+  margin: 0;
+  /* width: 16px;
+  height: 16px; */
+  /* flex: 0 0 16px; */
+  appearance: auto;
+  accent-color: var(--accent-3);
+  cursor: pointer;
+}
+
+/* keep the checkbox visually aligned on small screens */
+.dropdown-item input[type="checkbox"][aria-hidden="true"] {
+  opacity: 0; /* fallback if aria-hidden used */
+}
+
+/* compact layout: place the checkbox to the left then label */
+.dropdown-item .dropdown-item-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* small count / pill for showing number of selections (if you choose to add) */
+.dropdown-selected-count {
+  margin-left: 8px;
+  background: linear-gradient(180deg,#fff,#f7f8f9);
+  border: 1px solid rgba(15,23,30,0.04);
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+/* styling for the 'All' / clear option to be more subtle */
+.dropdown-item .muted { color: #8e8b85; font-weight: 600; }
+
+/* ensure correct layering when inside modals/other stacked UIs */
+.dropdown-wrap { z-index: 2000; }
+.dropdown-list { z-index: 2100; }
+
+/* responsiveness */
+@media (max-width: 760px) {
+  .dropdown-wrap { width: 100%; }
   .dropdown-list { max-height: 240px; }
+  .dropdown-btn { padding: 12px; }
+  .dropdown-item { padding: 10px 12px; }
+}
+
+/* optional: subtle focus style for each option (keyboard nav) */
+.dropdown-item:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(11,114,133,0.08);
+  border-radius: 8px;
 }

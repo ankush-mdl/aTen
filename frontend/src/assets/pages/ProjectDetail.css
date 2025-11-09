@@ -79,8 +79,8 @@
   flex-wrap: wrap;
 }
 
-.btn-call {
-  background: #333;
+.btn-call, .btn-secondary{
+  background: #a88441;
   text-align: center;
   color: white;
   font-weight: 700;
@@ -90,7 +90,9 @@
   text-transform: uppercase;
   font-size: 0.9rem;
   transition: background 0.2s ease;
-  
+}
+.btn-call:hover, .btn-secondary:hover {
+  background: #8c6b32;
 }
 .back{
   margin-bottom: 1rem !important;
@@ -105,18 +107,21 @@
   transform: translateX(-4px);
 }
 
-
-.btn.secondary {
-  background: #333;
-  color: #fff;
-  border-radius: 2px;
-}
-
-.btn.wa {
+.btn-wa {
   background: #25D366;
+  color: #e8e8e8;
   border-radius: 2px;
+   font-weight: 700;
+  text-decoration: none;
+  padding: 12px 24px;
+  border: none;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+  transition: background 0.2s ease;
 }
-
+.btn-wa:hover {
+  background: #1ebe5b;
+}
 /* ------------------ Back Button ------------------ */
 
 .back-btn-container {

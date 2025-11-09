@@ -35,7 +35,7 @@ db.run(`
     user_id INTEGER,
     email TEXT,
     city TEXT,
-    bhk_type TEXT,
+    type TEXT,
     bathroom_number TEXT,
     kitchen_type TEXT,
     material TEXT,

@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import "../assets/pages/InterioHome.css";
 import toast from "react-hot-toast";
+import React from "react";
 
 export default function InterioHome() {
   const navigate = useNavigate();
@@ -9,7 +10,7 @@ export default function InterioHome() {
   const handleProtectedNavigation = (path) => {
     const user = JSON.parse(localStorage.getItem("user"));
     if (!user) {
-      toast.error("Please login to continue!")
+      toast.error("Please login to continue!");
       navigate("/login");
       return;
     }
@@ -26,7 +27,8 @@ export default function InterioHome() {
             <button onClick={() => handleProtectedNavigation("/catalog/1bhk")}>1 BHK</button>
             <button onClick={() => handleProtectedNavigation("/catalog/2bhk")}>2 BHK</button>
             <button onClick={() => handleProtectedNavigation("/catalog/3bhk")}>3 BHK</button>
-            <button onClick={() => handleProtectedNavigation("/catalog/3+BHK")}>3+ BHK</button>
+            {/* use a safe URL token for 3+ */}
+            <button onClick={() => handleProtectedNavigation("/catalog/3-plus")}>3+ BHK</button>
             <button onClick={() => handleProtectedNavigation("/catalog/kitchen")}>Kitchen</button>
             <button onClick={() => handleProtectedNavigation("/catalog/bathroom")}>Bathroom</button>
           </div>

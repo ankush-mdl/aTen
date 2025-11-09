@@ -13,6 +13,7 @@ const path = require("path");
 const importProjectsRouter = require("./routes/importProjects");
 const uploadsRouter = require("./routes/getUploads");
 const importImages = require("./routes/importImages")
+const enquiries = require("./routes/enquiriesRoute");
 
 const app = express();
 const UPLOADS_DIR = path.join(__dirname, "uploads");
@@ -45,6 +46,7 @@ app.use("/api/uploads", uploads);
 app.use("/api/import-projects", importProjectsRouter);
 app.use("/api/uploads", uploadsRouter);
 app.use("/api/import-images", importImages);
+app.use("/api/enquiries", enquiries);
 // Root endpoint
 app.get("/", (req, res) => {
   res.send("A10 backend is running 🚀");

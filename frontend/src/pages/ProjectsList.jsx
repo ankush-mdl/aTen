@@ -200,6 +200,8 @@ useEffect(() => {
               onChange={(v) => handlePropertyTypeChange(v)}
               options={propertyTypeOptions}
               placeholder="All types"
+               includeAll={true}           // <-- shows the "All" option here
+              allLabel="All"
             />
           </div>
 
@@ -209,6 +211,8 @@ useEffect(() => {
               onChange={(v) => handleLocationAreaChange(v)}
               options={locationAreaOptions}
               placeholder="All areas"
+               includeAll={true}        // <-- shows the "All" option here
+  allLabel="All"
             />
           </div>
 
@@ -218,6 +222,8 @@ useEffect(() => {
               onChange={(v) => handleConfigurationChange(v)}
               options={configurationOptions}
               placeholder="Any configuration"
+               includeAll={true}           // <-- shows the "All" option here
+  allLabel="All"
             />
           </div>
 

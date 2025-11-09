@@ -146,7 +146,7 @@ export default function ProjectDetail() {
                   /\D/g,
                   ""
                 )}`}
-                className="btn wa"
+                className="btn-wa"
                 target="_blank"
                 rel="noreferrer"
               >
@@ -158,7 +158,7 @@ export default function ProjectDetail() {
                 href={project.brochure_url}
                 target="_blank"
                 rel="noreferrer"
-                className="btn secondary"
+                className="btn-secondary"
               >
                 Download Brochure
               </a>

@@ -17,6 +17,7 @@ import ProjectDetail from "./pages/ProjectDetails";
 import ProjectsAdmin from "./pages/admin/ProjectsAdmin";
 import ProjectForm from "./pages/admin/ProjectForm";
 import ImportProjects from "./pages/admin/ImportProjects";
+import EnquiriesAdmin from "./pages/admin/EnquiriesAdmin";
 
 export default function App() {
   return (
@@ -41,6 +42,7 @@ export default function App() {
           {/* --- Admin routes --- */}
           <Route path="/admin" element={<DashboardLayout />}>
             <Route path="dashboard" element={<h2>Welcome Admin</h2>} />
+             <Route path="enquiries" element={<EnquiriesAdmin />} />
             <Route path="import" element={<ImportProjects />} />
             <Route path="projects" element={<ProjectsAdmin />} />
             <Route path="projects/new" element={<ProjectForm />} />

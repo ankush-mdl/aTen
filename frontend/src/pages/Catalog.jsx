@@ -1,4 +1,3 @@
-// src/pages/Catalog.jsx
 import { Link, useParams, useNavigate } from "react-router-dom";
 import "./../assets/pages/Catalog.css";
 import React, { useState, useEffect } from "react";
@@ -21,7 +20,7 @@ const catalogOptions = {
 const kitchenThemes = ["Island", "Parallel", "Open Concept", "U-Shaped"];
 
 /* clearly defined commercial types (used for routing / detection) */
-const commercialTypes = ["offices", "cafes", "showrooms", "banquets", "clinics", "salons"];
+const commercialTypes = ["offices", "cafes", "showrooms", "banquets", "clinics", "salons", "other"];
 
 export default function CatalogWithSummary() {
   const { type } = useParams();
@@ -48,37 +47,48 @@ export default function CatalogWithSummary() {
   // helper: robust detection for 3+bhk style strings
   const is3Plus = (t) => {
     if (!t) return false;
-    const normalized = String(t).toLowerCase().replace(/\s+/g, "");
-    return /(^3\+?bhk$)|(^3bhk$)|(^3plus$)|(^3\+?$)/i.test(normalized) || normalized.includes("3+");
+    // normalize: lower + collapse whitespace + replace common separators
+    const normalized = String(t).toLowerCase().trim().replace(/\s+/g, "");
+    // accept: any explicit plus forms (3+bhk, 3+), or '3plus', or '3-plus' (normalized) or '3plusbhk'
+    return /(^3\+bhk$)|(^3\+$)|(^3plus$)|(^3plusbhk$)|(^3\-?plus$)|(^3\-?plusbhk$)/i.test(normalized) || normalized.includes("3+");
   };
 
   useEffect(() => {
     if (type) {
+      const raw = String(type).trim();
+      const tl = raw.toLowerCase();
+
       // Normalize display label for the readonly field
-      if (is3Plus(type)) {
+      if (is3Plus(raw) || tl === "3-plus" || tl === "3+bhk" || tl === "3plus") {
         setSelected((prev) => ({ ...prev, apartmentType: "3+ BHK" }));
-      } else if (type.toLowerCase() === "bathroom") {
+      } else if (tl === "bathroom") {
         setSelected((prev) => ({ ...prev, apartmentType: "Bathroom" }));
-      } else if (type.toLowerCase() === "kitchen") {
+      } else if (tl === "kitchen") {
         setSelected((prev) => ({ ...prev, apartmentType: "Kitchen" }));
-      } else if (commercialTypes.includes(type.toLowerCase())) {
+      } else if (commercialTypes.includes(tl)) {
         // show the commercial type as apartmentType (but editable for custom)
-        setSelected((prev) => ({ ...prev, apartmentType: type }));
+        setSelected((prev) => ({ ...prev, apartmentType: raw }));
       } else {
         // assume "1bhk", "2bhk", "3bhk" etc.
-        setSelected((prev) => ({ ...prev, apartmentType: type.replace(/bhk/i, " BHK") }));
+        setSelected((prev) => ({ ...prev, apartmentType: raw.replace(/bhk/i, " BHK") }));
       }
+    } else {
+      // clear apartmentType when no type param
+      setSelected((prev) => ({ ...prev, apartmentType: "" }));
     }
   }, [type]);
 
   /* Generic toggle for multi-select categories (themes, kitchens, materials) */
   const toggleSelection = (category, value) => {
     setSelected((prev) => {
+      const items = Array.isArray(prev[category]) ? prev[category] : [];
       if (category === "materials") {
-        return { ...prev, materials: prev.materials.includes(value) ? [] : [value] };
+        // materials is single-select (only one expensive option at a time)
+        return { ...prev, materials: items.includes(value) ? [] : [value] };
       }
-      const items = prev[category] || [];
-      return items.includes(value) ? { ...prev, [category]: items.filter((v) => v !== value) } : { ...prev, [category]: [...items, value] };
+      return items.includes(value)
+        ? { ...prev, [category]: items.filter((v) => v !== value) }
+        : { ...prev, [category]: [...items, value] };
     });
   };
 
@@ -87,7 +97,7 @@ export default function CatalogWithSummary() {
   };
 
   const handleRemoveSelection = (category, value) => {
-    setSelected((prev) => ({ ...prev, [category]: prev[category].filter((item) => item !== value) }));
+    setSelected((prev) => ({ ...prev, [category]: (prev[category] || []).filter((item) => item !== value) }));
   };
 
   /* ----- KB Enquiry submit (bathroom or kitchen) ----- */
@@ -212,7 +222,7 @@ export default function CatalogWithSummary() {
       user_id,
       email: selected.email,
       city: selected.city || "",
-      bhk_type: selected.apartmentType,
+      type: selected.apartmentType,
       bathroom_number: parseInt(selected.washrooms) || 0,
       kitchen_type: (selected.kitchens || []).join(", "),
       material: (selected.materials || []).join(", "),
@@ -280,7 +290,7 @@ export default function CatalogWithSummary() {
       </div>
 
       <div className="catalog-summary">
-        <button className="back-btn" onClick={() => navigate("/interio")}>← Back</button>
+        <button className="back-btn" onClick={() => navigate("/interio")}> Back</button>
         <h2>Bathroom Enquiry</h2>
 
         <div className="summary-fields">
@@ -348,7 +358,7 @@ export default function CatalogWithSummary() {
       </div>
 
       <div className="catalog-summary">
-        <button className="back-btn" onClick={() => navigate("/interio")}>← Back</button>
+        <button className="back-btn" onClick={() => navigate("/interio")}> Back</button>
         <h2>Kitchen Enquiry</h2>
 
         <div className="summary-fields">
@@ -408,7 +418,7 @@ export default function CatalogWithSummary() {
         </div>
 
         <div className="catalog-summary">
-          <button className="back-btn" onClick={() => navigate("/interio")}>← Back</button>
+          <button className="back-btn" onClick={() => navigate("/interio")}>Back</button>
           <h2>Custom / Commercial Enquiry</h2>
 
           <div className="summary-fields">
@@ -474,7 +484,7 @@ export default function CatalogWithSummary() {
 
       {/* RIGHT PANEL (SUMMARY) */}
       <div className="catalog-summary">
-        <button className="back-btn" onClick={() => navigate("/interio")}>← Back</button>
+        <button className="back-btn" onClick={() => navigate("/interio")}> Back</button>
         <h2>Select Ideas You Are Open To</h2>
 
         <div className="summary-fields">

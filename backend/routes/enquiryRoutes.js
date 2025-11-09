@@ -8,7 +8,7 @@ router.post("/", (req, res) => {
     user_id,
     email,
     city,
-    bhk_type,
+    type,
     bathroom_number,
     kitchen_type,
     material,
@@ -16,13 +16,13 @@ router.post("/", (req, res) => {
     theme,
   } = req.body;
 
-  if (!user_id || !email || !bhk_type) {
+  if (!user_id || !email || !type) {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
   const sql = `
     INSERT INTO home_enquiries (
-      user_id, email, city, bhk_type, bathroom_number, kitchen_type, material,
+      user_id, email, city, type, bathroom_number, kitchen_type, material,
       area, theme
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -34,7 +34,7 @@ router.post("/", (req, res) => {
       user_id,
       email,
       city,
-      bhk_type,
+      type,
       bathroom_number,
       kitchen_type,
       material,
