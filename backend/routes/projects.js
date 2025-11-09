@@ -1,6 +1,7 @@
 // server/routes/projects.js
 const express = require("express");
 const db = require("../db");
+const verifyFirebaseToken = require("../middleware/verifyFirebaseToken");
 const router = express.Router();
 const slugify = (s) =>
   String(s || "")
@@ -103,7 +104,7 @@ router.get("/", (req, res) => {
  * Body: full project object. Creates slug automatically if not provided.
  * NOTE: protect this route with auth in production.
  */
-router.post("/", (req, res) => {
+router.post("/", verifyFirebaseToken,  (req, res) => {
   const body = req.body || {};
   const slugVal = body.slug ? slugify(body.slug) : slugify(body.title);
 
@@ -184,7 +185,7 @@ router.post("/", (req, res) => {
 /**
  * PUT /api/projects/:id  (update)
  */
-router.put("/:id", (req, res) => {
+router.put("/:id", verifyFirebaseToken,  (req, res) => {
   const { id } = req.params;
   const body = req.body || {};
   const slugVal = body.slug ? String(body.slug) : slugify(body.title);
@@ -249,7 +250,7 @@ router.put("/:id", (req, res) => {
 /**
  * DELETE /api/projects/:id
  */
-router.delete("/:id", (req, res) => {
+router.delete("/:id", verifyFirebaseToken,  (req, res) => {
   const { id } = req.params;
   db.run("DELETE FROM projects WHERE id = ?", [id], function (err) {
     if (err) return res.status(500).json({ error: err.message });

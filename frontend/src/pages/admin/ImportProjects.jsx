@@ -2,12 +2,77 @@
 import React, { useState } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
+import { auth } from "../../firebaseConfig";
 import "../../assets/pages/admin/ImportProjects.css";
 
 const BACKEND_BASE =
   typeof window !== "undefined" && window.location.hostname === "localhost"
     ? "http://localhost:5000"
     : "";
+
+// ---- Helpers to get auth token safely ----
+async function getAuthToken({ timeoutMs = 3000, intervalMs = 150 } = {}) {
+  const start = Date.now();
+
+  // small helper to read storages safely
+  const readStored = () => {
+    try {
+      const l = localStorage.getItem("auth_token");
+      if (l && l !== "null" && l !== "") return l;
+    } catch (e) { /* ignore storage access errors */ }
+    return null;
+  };
+
+  while (Date.now() - start < timeoutMs) {
+    // 1) quick check storages
+    const stored = readStored();
+    if (stored) return stored;
+
+    // 2) try Firebase currentUser token if available
+    try {
+      if (auth && auth.currentUser) {
+        const idToken = await auth.currentUser.getIdToken(false); // don't force refresh first
+        if (idToken) {
+          // cache for future sync
+          try { localStorage.setItem("auth_token", idToken); } catch (e) {}
+          return idToken;
+        }
+      }
+    } catch (err) {
+      // non-fatal: firebase might not be ready yet
+      // console.warn("getAuthToken: firebase attempt failed", err);
+    }
+
+    // wait briefly then retry
+    await new Promise((res) => setTimeout(res, intervalMs));
+  }
+
+  // final attempt with forced refresh from Firebase (in case cached token is stale)
+  try {
+    if (auth && auth.currentUser) {
+      const idToken = await auth.currentUser.getIdToken(true); // force refresh
+      if (idToken) {
+        try { localStorage.setItem("auth_token", idToken); } catch (e) {}
+        try { sessionStorage.setItem("auth_token", idToken); } catch (e) {}
+        return idToken;
+      }
+    }
+  } catch (err) {
+    // ignore
+  }
+
+  // nothing found within timeout
+  return null;
+}
+
+
+  async function makeHeaders() {
+    const token = await getAuthToken();
+    console.log(token);
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return headers;
+  }
 
 export default function ImportProjects() {
   const [excelFile, setExcelFile] = useState(null);
@@ -29,10 +94,13 @@ export default function ImportProjects() {
     setLoadingExcel(true);
 
     try {
+      const headers = await makeHeaders();
       const res = await fetch(`${BACKEND_BASE}/api/import-projects`, {
         method: "POST",
+        headers,
         body: fd,
       });
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `Server ${res.status}`);
@@ -61,10 +129,13 @@ export default function ImportProjects() {
     setLoadingZip(true);
 
     try {
+      const headers = await makeHeaders();
       const res = await fetch(`${BACKEND_BASE}/api/import-images`, {
         method: "POST",
+        headers,
         body: fd,
       });
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `Server ${res.status}`);
@@ -162,7 +233,7 @@ export default function ImportProjects() {
               />
               <label htmlFor="zipFile" className="file-btn">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <path d="M21 10v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M21 10v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 1 1 2-2h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
                   <path d="M7 10h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 Choose ZIP
@@ -175,7 +246,7 @@ export default function ImportProjects() {
             <div className="form-actions-row">
               <button
                 type="submit"
-                className="btn secondary-btn"
+                className="btn"
                 disabled={loadingZip}
               >
                 {loadingZip ? "Uploading..." : "Upload Images ZIP"}

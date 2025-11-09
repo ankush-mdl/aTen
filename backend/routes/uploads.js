@@ -3,6 +3,7 @@ const express = require("express");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const verifyFirebaseToken = require("../middleware/verifyFirebaseToken");
 const router = express.Router();
 
 const UPLOAD_DIR = path.join(__dirname, "..", "uploads");
@@ -18,7 +19,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-router.post("/", upload.single("file"), (req, res) => {
+router.post("/", verifyFirebaseToken, upload.single("file"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file" });
 
   const protocol = req.protocol || "http";

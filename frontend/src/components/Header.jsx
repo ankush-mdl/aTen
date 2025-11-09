@@ -83,7 +83,7 @@ export default function Navbar() {
               <button onClick={() => handleNavClick("/login")} className="login-btn">Login</button>
             ) : (
               <div className="user-section header-dropdown">
-                <span className="username">Hi, {user.name || user.displayName || "User"}</span>
+                <span className="username">Hi, {user?.name || user?.displayName || "User"}</span>
                 <button onClick={handleLogout} className="logout-btn">Logout</button>
               </div>
             )}

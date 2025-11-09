@@ -36,9 +36,9 @@ body {
 }
 
 .selection-card {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.96), rgba(221, 221, 221, 0.96));
+  background: #ffffffb4;
   border-radius: var(--radius);
-  border: 2px solid #262421;
+  border: 2px solid #a88441;
   padding: 24px;
   box-shadow: var(--shadow-1);
   /* border: 1px solid rgba(20,30,36,0.04); */
@@ -73,19 +73,19 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--muted);
+  color: #a88441;
   transition: all 180ms ease;
 }
 
 .option-btn:hover {
   transform: translateY(-4px);
-  color: var(--accent);
+  color: #a88441;
   border-color: rgba(106,166,201,0.14);
 }
 
 .option-btn.selected {
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  color: white;
+  color: #a88441;
   border: none;
   box-shadow: 0 12px 36px rgba(47,75,90,0.12);
   transform: translateY(-6px);
@@ -118,11 +118,12 @@ body {
 } */
 /* Summary Panel */
 .catalog-summary {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.96), rgba(221, 221, 221, 0.96));
+  background: #ffffffb4;
   border-radius: 20px;
   padding: 22px;
   box-shadow: var(--shadow-2);
-  border: 2px solid #262421;
+  color: #a88441 !important;
+    border: 2px solid #a88441;
 }
 
 .catalog-summary h2 {
@@ -224,7 +225,7 @@ body {
   border-radius: 12px;
   font-size: 1rem;
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  color: white;
+  color: #a88441;
   border: none;
   cursor: pointer;
   transition: 0.2s ease-in-out;

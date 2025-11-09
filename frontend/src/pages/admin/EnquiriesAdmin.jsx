@@ -4,6 +4,7 @@ import Dropdown from "../../components/Dropdown";
 import "../../assets/pages/admin/EnquiriesAdmin.css";
 import toast from "react-hot-toast";
 import EnquiriesExportModal from "./EnquiriesExportModal";
+import { auth } from "../../firebaseConfig";
 
 const BACKEND_BASE =
   typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -80,6 +81,72 @@ export default function EnquiriesAdmin() {
   const [editingRow, setEditingRow] = useState(null);
   const [editBody, setEditBody] = useState({});
 
+  // --- Helpers for auth headers (handles race conditions) ---
+  // safe polling-getAuthToken: polls storages + Firebase until token or timeout
+async function getAuthToken({ timeoutMs = 3000, intervalMs = 150 } = {}) {
+  const start = Date.now();
+
+  // small helper to read storages safely
+  const readStored = () => {
+    try {
+      const l = localStorage.getItem("auth_token");
+      if (l && l !== "null" && l !== "") return l;
+    } catch (e) { /* ignore storage access errors */ }
+    return null;
+  };
+
+  while (Date.now() - start < timeoutMs) {
+    // 1) quick check storages
+    const stored = readStored();
+    if (stored) return stored;
+
+    // 2) try Firebase currentUser token if available
+    try {
+      if (auth && auth.currentUser) {
+        const idToken = await auth.currentUser.getIdToken(false); // don't force refresh first
+        if (idToken) {
+          // cache for future sync
+          try { localStorage.setItem("auth_token", idToken); } catch (e) {}
+          return idToken;
+        }
+      }
+    } catch (err) {
+      // non-fatal: firebase might not be ready yet
+      // console.warn("getAuthToken: firebase attempt failed", err);
+    }
+
+    // wait briefly then retry
+    await new Promise((res) => setTimeout(res, intervalMs));
+  }
+
+  // final attempt with forced refresh from Firebase (in case cached token is stale)
+  try {
+    if (auth && auth.currentUser) {
+      const idToken = await auth.currentUser.getIdToken(true); // force refresh
+      if (idToken) {
+        try { localStorage.setItem("auth_token", idToken); } catch (e) {}
+        try { sessionStorage.setItem("auth_token", idToken); } catch (e) {}
+        return idToken;
+      }
+    }
+  } catch (err) {
+    // ignore
+  }
+
+  // nothing found within timeout
+  return null;
+}
+
+
+  async function makeHeaders() {
+    const token = await getAuthToken();
+    console.log(token);
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return headers;
+  }
+  // --- end helpers ---
+
   // derive columns and search options
   const columns = useMemo(() => {
     const setKeys = new Set();
@@ -129,7 +196,14 @@ export default function EnquiriesAdmin() {
     let mounted = true;
     (async () => {
       try {
-        const res = await fetch(`${BACKEND_BASE}/api/enquiries?table=${encodeURIComponent(table)}`);
+        const headers = await makeHeaders();
+
+        const res = await fetch(`${BACKEND_BASE}/api/enquiries?table=${encodeURIComponent(table)}`, {
+          method: "GET",
+          headers,
+          credentials: "include",
+        });
+
         if (!mounted) return;
         if (!res.ok) {
           toast.error("Failed to load enquiries");
@@ -220,7 +294,14 @@ export default function EnquiriesAdmin() {
       else if (row.user_phone) qs = `phone=${encodeURIComponent(row.user_phone)}`;
       else if (row.email) qs = `email=${encodeURIComponent(row.email)}`;
 
-      const res = await fetch(`${BACKEND_BASE}/api/enquiries/related?${qs}`);
+      const headers = await makeHeaders();
+
+      const res = await fetch(`${BACKEND_BASE}/api/enquiries/related?${qs}`, {
+        method: "GET",
+        headers,
+        credentials: "include",
+      });
+
       if (!res.ok) {
         toast.error("Failed to load related enquiries");
         setRelatedMap((m) => ({ ...m, [personKey]: [] }));
@@ -256,11 +337,16 @@ export default function EnquiriesAdmin() {
       const payload = { ...editBody };
       delete payload.table;
       delete payload.enquiry_id;
+
+      const headers = await makeHeaders();
+
       const res = await fetch(`${BACKEND_BASE}/api/enquiries/${encodeURIComponent(tbl)}/${encodeURIComponent(id)}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(payload),
+        credentials: "include",
       });
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         toast.error("Update failed: " + (err.error || res.status));
@@ -279,9 +365,14 @@ export default function EnquiriesAdmin() {
     const ok = window.confirm(`Delete enquiry ${row.enquiry_id} from ${row.table}? This cannot be undone.`);
     if (!ok) return;
     try {
+      const headers = await makeHeaders();
+
       const res = await fetch(`${BACKEND_BASE}/api/enquiries/${encodeURIComponent(row.table)}/${encodeURIComponent(row.enquiry_id)}`, {
         method: "DELETE",
+        headers,
+        credentials: "include",
       });
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         toast.error("Delete failed: " + (err.error || res.status));
@@ -367,46 +458,45 @@ export default function EnquiriesAdmin() {
               <Dropdown id="city-filter" value={cityFilter} onChange={(v) => { setCityFilter(v); setPage(1); }} options={[{ value: "", label: "All cities" }, ...availableCities.map((c) => ({ value: c, label: c }))]} placeholder="All cities" includeAll={false} />
             </div>
 
-
             <div style={{ display: "flex", flexDirection: "column" }}>
               <div style={{ fontSize: 12, color: "#333", fontWeight: 700, marginBottom: 6 }}>Type</div>
               <Dropdown id="type-filter" value={typeFilter} onChange={(v) => { setTypeFilter(v); setPage(1); }} options={[{ value: "", label: "All types" }, ...availableTypes.map((t) => ({ value: t, label: t }))]} placeholder="All types" includeAll={false} />
             </div>
-            <div style={{background:"#BFADA3", padding:"10px", marginLeft:"3rem", borderRadius:"8px"}}>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <div style={{ display: "flex", flexDirection: "column", minWidth: 160 }}>
-                <div style={{ fontSize: 12, color: "#333", fontWeight: 700, marginBottom: 6 }}>Search by</div>
-                <Dropdown id="search-col" value={searchCol} onChange={(v) => { setSearchCol(v); setPage(1); }} options={[{ value: "", label: "Any column" }, ...availableSearchCols.map((c) => ({ value: c, label: c }))]} placeholder="Choose column" includeAll={false} />
-              </div>
 
-              <div style={{ display: "flex", flexDirection: "column", minWidth: 220 }}>
-                <div style={{ fontSize: 12, color: "#333", fontWeight: 700, marginBottom: 6 }}>Value</div>
-                <input value={searchValue} onChange={(e) => { setSearchValue(e.target.value); setPage(1); }} placeholder="Type to search..." style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(15,23,30,0.06)", background: "#fff", outline: "none", minWidth: 220 }} />
-              </div>
+            <div style={{ background: "#BFADA3", padding: "10px", marginLeft: "3rem", borderRadius: "8px" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div style={{ display: "flex", flexDirection: "column", minWidth: 160 }}>
+                  <div style={{ fontSize: 12, color: "#333", fontWeight: 700, marginBottom: 6 }}>Search by</div>
+                  <Dropdown id="search-col" value={searchCol} onChange={(v) => { setSearchCol(v); setPage(1); }} options={[{ value: "", label: "Any column" }, ...availableSearchCols.map((c) => ({ value: c, label: c }))]} placeholder="Choose column" includeAll={false} />
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", minWidth: 220 }}>
+                  <div style={{ fontSize: 12, color: "#333", fontWeight: 700, marginBottom: 6 }}>Value</div>
+                  <input value={searchValue} onChange={(e) => { setSearchValue(e.target.value); setPage(1); }} placeholder="Type to search..." style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(15,23,30,0.06)", background: "#fff", outline: "none", minWidth: 220 }} />
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-
-      {/* Columns + Page size */}
-      <div style={{ marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-        <div>
-          <label style={{ fontWeight: 700, marginRight: 8 }}>Columns</label>
-          <div style={{ display: "inline-block", zIndex: "0", minWidth: 260 }}>
-            <Dropdown id="cols-dropdown" value={visibleCols} onChange={(vals) => setVisibleCols(Array.isArray(vals) ? vals : [])} options={columns.map((c) => ({ value: c, label: c }))} placeholder="Select columns" multiple={true} includeAll={false} />
+        {/* Columns + Page size */}
+        <div style={{ marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <div>
+            <label style={{ fontWeight: 700, marginRight: 8 }}>Columns</label>
+            <div style={{ display: "inline-block", zIndex: "0", minWidth: 260 }}>
+              <Dropdown id="cols-dropdown" value={visibleCols} onChange={(vals) => setVisibleCols(Array.isArray(vals) ? vals : [])} options={columns.map((c) => ({ value: c, label: c }))} placeholder="Select columns" multiple={true} includeAll={false} />
+            </div>
           </div>
         </div>
-    
-        
-      </div>
-   <div className="right-controls" style={{ alignItems: "flex-end" }}>
+
+        <div className="right-controls" style={{ alignItems: "flex-end" }}>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <button className="btn refresh" onClick={refresh}>Refresh</button>
             <button className="btn" onClick={() => setShowExportModal(true)} style={{ marginLeft: 8 }}>Export CSV</button>
           </div>
         </div>
       </div>
+
       {/* Table */}
       <div className="table-wrap">
         {loading ? (
@@ -460,7 +550,9 @@ export default function EnquiriesAdmin() {
                                 <div>Loading…</div>
                               ) : (
                                 <div className="related-list">
-                                  {(relatedMap[personKey] || []).length === 0 ? <div className="none">No other enquiries found for this person.</div> : (
+                                  {(relatedMap[personKey] || []).length === 0 ? (
+                                    <div className="none">No other enquiries found for this person.</div>
+                                  ) : (
                                     <table className="related-table">
                                       <thead>
                                         <tr><th>Source</th><th>Created</th><th>City</th><th>Contact</th><th>Details</th></tr>

@@ -5,6 +5,7 @@ const fs = require("fs");
 const multer = require("multer");
 const AdmZip = require("adm-zip"); // npm i adm-zip
 const crypto = require("crypto");
+const verifyFirebaseToken = require("../middleware/verifyFirebaseToken");
 
 const router = express.Router();
 const UPLOAD_DIR = path.join(__dirname, "..", "uploads");
@@ -38,7 +39,7 @@ const upload = multer({ storage });
  * Returns JSON:
  *  { uploaded: ["/uploads/abc.jpg", "/uploads/def.png"], message: "..." }
  */
-router.post("/", upload.fields([{ name: "file", maxCount: 1 }, { name: "images_zip", maxCount: 1 }]), async (req, res) => {
+router.post("/", verifyFirebaseToken, upload.fields([{ name: "file", maxCount: 1 }, { name: "images_zip", maxCount: 1 }]), async (req, res) => {
   try {
     const saved = [];
 

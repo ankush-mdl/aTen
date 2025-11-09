@@ -1,7 +1,11 @@
 const express = require("express");
 const db = require("../db"); // your sqlite db wrapper
 const router = express.Router();
+const verifyFirebaseToken = require("../middleware/verifyFirebaseToken");
+const requireAdmin = require("../middleware/requireAdmin");
 
+router.use(verifyFirebaseToken);
+router.use(requireAdmin);
 // POST /api/auth/admin
 router.post("/admin", (req, res) => {
   const { name, phone } = req.body;

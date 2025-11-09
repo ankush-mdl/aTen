@@ -8,6 +8,7 @@ const axios = require("axios");
 const AdmZip = require("adm-zip");
 const xlsx = require("xlsx");
 const db = require("../db");
+const verifyFirebaseToken = require("../middleware/verifyFirebaseToken");
 const UPLOADS_DIR = path.join(__dirname, "..", "uploads");
 const TMP_DIR = path.join(__dirname, "..", "tmp");
 
@@ -89,7 +90,7 @@ async function fetchAndSaveUrl(url) {
  *  OR
  *  - house1.jpg, house2.png  (when you upload a ZIP containing house1.jpg/house2.png)
  */
-router.post("/", upload.fields([{ name: "file", maxCount: 1 }, { name: "images_zip", maxCount: 1 }]), async (req, res) => {
+router.post("/", verifyFirebaseToken, upload.fields([{ name: "file", maxCount: 1 }, { name: "images_zip", maxCount: 1 }]), async (req, res) => {
   try {
     if (!req.files || !req.files.file || req.files.file.length === 0) {
       return res.status(400).json({ error: "Excel file (.xlsx) is required (field name: file)" });

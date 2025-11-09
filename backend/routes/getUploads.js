@@ -2,6 +2,8 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
+const requireAdmin = require("../middleware/requireAdmin");
+const verifyFirebaseToken = require("../middleware/verifyFirebaseToken");
 
 const router = express.Router();
 
@@ -52,7 +54,7 @@ function listUploadFiles() {
  * Returns JSON: array of image paths, e.g.
  * ["/uploads/1676123-house1.jpg", "/uploads/sub/office1.png"]
  */
-router.get("/", (req, res) => {
+router.get("/", verifyFirebaseToken, (req, res) => {
   try {
     const items = listUploadFiles();
     res.json(items);

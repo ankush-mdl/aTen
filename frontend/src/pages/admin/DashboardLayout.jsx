@@ -4,6 +4,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import "../../assets/pages/admin/ProjectsAdmin.css"; // reuse admin CSS for layout basics
 import "../../assets/pages/admin/ProjectForm.css"; // optional - for form styles in nested route
 import { useAuth } from "../../context/AuthContext";
+import { auth } from "../../firebaseConfig";
 
 /**
  * DashboardLayout
@@ -79,6 +80,7 @@ export default function DashboardLayout() {
           <NavLink to="/admin/projects/new" className={activeClass}>
             Add Project
           </NavLink>
+          
 
           {/* if you have other admin sections, add them here */}
           <div
@@ -96,6 +98,9 @@ export default function DashboardLayout() {
           </NavLink>
           <NavLink to="/admin/enquiries" className={activeClass}>
             Interio Enquiries
+          </NavLink>
+          <NavLink to="/admin/addadmins" className={activeClass}>
+            Add Admins
           </NavLink>
         </nav>
 

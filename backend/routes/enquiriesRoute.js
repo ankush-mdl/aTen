@@ -1,6 +1,8 @@
 // server/routes/enquiriesRoutes.js
 const express = require("express");
 const db = require("../db");
+const verifyFirebaseToken = require("../middleware/verifyFirebaseToken");
+
 const router = express.Router();
 
 // promise wrapper for db.all
@@ -121,7 +123,7 @@ function buildSelectSqlFor(key) {
  * Returns JSON { items: [ ...rows ] }.
  * NOTE: frontend will provide one of the three table values (no "all")
  */
-router.get("/", async (req, res) => {
+router.get("/", verifyFirebaseToken,  async (req, res) => {
   try {
     const table = (req.query.table || "").trim();
     if (!table || !TABLE_MAP[table]) {
@@ -147,7 +149,7 @@ router.get("/", async (req, res) => {
  *
  * Returns { items: [ ... ] } from all three tables (deduped)
  */
-router.get("/related", async (req, res) => {
+router.get("/related", verifyFirebaseToken, async (req, res) => {
   try {
     const { user_id, phone, email } = req.query;
     if (!user_id && !phone && !email) {
@@ -230,7 +232,7 @@ router.get("/related", async (req, res) => {
  * PUT /api/enquiries/:table/:id
  * Update allowed columns for a given enquiry
  */
-router.put("/:table/:id", async (req, res) => {
+router.put("/:table/:id", verifyFirebaseToken, async (req, res) => {
   try {
     const tableKey = (req.params.table || "").trim();
     const id = req.params.id;
@@ -279,7 +281,7 @@ router.put("/:table/:id", async (req, res) => {
 /**
  * DELETE /api/enquiries/:table/:id
  */
-router.delete("/:table/:id", async (req, res) => {
+router.delete("/:table/:id", verifyFirebaseToken, async (req, res) => {
   try {
     const tableKey = (req.params.table || "").trim();
     const id = req.params.id;

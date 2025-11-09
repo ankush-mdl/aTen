@@ -1,62 +1,50 @@
+// backend/routes/authRoutes.js
 const express = require("express");
+const admin = require("../firebaseAdmin"); // Firebase Admin SDK
+const db = require("../db"); // SQLite DB connection
+const verifyFirebaseToken = require("../middleware/verifyFirebaseToken");
+
 const router = express.Router();
-const db = require("../db");
 
-// Create or log in user (after OTP verification)
-router.post("/", (req, res) => {
-  const { name, phone } = req.body;
-  if (!name || !phone) {
-    return res.status(400).json({ error: "Both name and phone are required" });
-  }
+/**
+ * POST /auth
+ * Validates Firebase ID token and checks if user is in admin table
+ */
+router.post("/", verifyFirebaseToken, (req, res) => {
+  try {
+    const phone = req.firebaseUser.phone_number;
 
-  const phoneNormalized = String(phone).trim();
-  const nameNormalized = String(name).trim();
-
-  // 1) Look up user by phone
-  const selectSql = `SELECT * FROM users WHERE phone = ?`;
-  db.get(selectSql, [phoneNormalized], (err, row) => {
-    if (err) {
-      console.error("DB error on SELECT users:", err);
-      return res.status(500).json({ error: "Database error" });
+    if (!phone) {
+      return res.status(400).json({ error: "No phone number in token" });
     }
 
-    if (row) {
-      // User exists — enforce name match
-      const storedName = row.name ? String(row.name).trim() : "";
-      if (storedName && storedName !== nameNormalized) {
-        // Name mismatch — reject login for previously-logged-in user
-        return res.status(400).json({
-          error: "Provided name does not match the existing account for this phone."
-        });
+    // ✅ Check if phone number exists in admin table
+    db.get("SELECT * FROM admin WHERE phone = ?", [phone], (err, adminRow) => {
+      if (err) {
+        console.error("Error checking admin table:", err);
+        return res.status(500).json({ error: "Database error" });
       }
 
-      // Name matches (or stored name is empty) -> allow login
+      const isAdmin = !!adminRow;
+
+      // Optionally, insert user in 'users' table if needed (commented out)
+      // db.run("INSERT OR IGNORE INTO users (phone) VALUES (?)", [phone]);
+
+      // ✅ Return Firebase user info + isAdmin flag
       return res.json({
+        success: true,
         user: {
-          id: row.id,
-          name: row.name || nameNormalized,
-          phone: row.phone,
-          isAdmin: !!row.isAdmin // optional if you have this column
-        }
+          uid: req.firebaseUser.uid,
+          phone: req.firebaseUser.phone_number,
+          name: req.firebaseUser.name || null,
+          isAdmin,
+        },
       });
-    }
-
-    // 2) No existing user: create new user
-    const insertSql = `INSERT INTO users (name, phone, created_at) VALUES (?, ?, datetime('now'))`;
-    db.run(insertSql, [nameNormalized, phoneNormalized], function (insertErr) {
-      if (insertErr) {
-        console.error("DB error on INSERT users:", insertErr);
-        return res.status(500).json({ error: "Database error on create user" });
-      }
-      const newUser = {
-        id: this.lastID,
-        name: nameNormalized,
-        phone: phoneNormalized,
-        isAdmin: false
-      };
-      return res.status(201).json({ user: newUser });
     });
-  });
+  } catch (err) {
+    console.error("/auth error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 module.exports = router;

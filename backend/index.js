@@ -14,6 +14,11 @@ const importProjectsRouter = require("./routes/importProjects");
 const uploadsRouter = require("./routes/getUploads");
 const importImages = require("./routes/importImages")
 const enquiries = require("./routes/enquiriesRoute");
+const verifyFirebaseToken = require("./middleware/verifyFirebaseToken");
+const requireAdmin = require("./middleware/requireAdmin");
+const adminsRouter = require("./routes/addAdmin");
+
+
 
 const app = express();
 const UPLOADS_DIR = path.join(__dirname, "uploads");
@@ -22,7 +27,20 @@ app.use("/uploads", express.static(UPLOADS_DIR, {
 }));
 
 // CORS must be before routes
-app.use(cors());
+app.use(cors({
+  origin: ["http://localhost:5173", "http://127.0.0.1:5173"], // your frontend dev origins
+  credentials: true,
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "Accept",
+    "X-Requested-With",
+    "Origin"
+  ],
+  exposedHeaders: ["Authorization"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+}));
+
 app.use(bodyParser.json());
 
 // CRITICAL FIX: Static files MUST be served BEFORE API routes
@@ -35,10 +53,13 @@ app.use((req, res, next) => {
   next();
 });
 
+
 // API Routes
+app.use("/api/admins", adminsRouter);
+app.use("/api/admin", verifyFirebaseToken, requireAdmin, adminRoutes);
 app.use("/api/kb_enquiries", kbEnquiryRoutes);
 app.use("/api/custom_enquiries", customEnquiryRoutes);
-app.use("/api/auth", authRoutes);
+app.use("/auth", authRoutes);
 app.use("/api/enquiries", enquiryRoutes);
 app.use("/api/auth", adminRoutes);
 app.use("/api/projects", projectsRoutes);

@@ -25,6 +25,7 @@ export default function EnquiriesExportModal({
   visibleCols = new Set(),
   pageSize = 10,
 }) {
+  
   const totalRows = filteredItems.length;
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
 

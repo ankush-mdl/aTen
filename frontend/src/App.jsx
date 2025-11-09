@@ -10,7 +10,6 @@ import PhoneLoginModal from "./components/PhoneLogin";
 import { Toaster } from "react-hot-toast";
 import DashboardLayout from "./pages/admin/DashboardLayout";
 
-
 // 👉 Import new Realty pages
 import ProjectsList from "./pages/ProjectsList";
 import ProjectDetail from "./pages/ProjectDetails";
@@ -18,11 +17,14 @@ import ProjectsAdmin from "./pages/admin/ProjectsAdmin";
 import ProjectForm from "./pages/admin/ProjectForm";
 import ImportProjects from "./pages/admin/ImportProjects";
 import EnquiriesAdmin from "./pages/admin/EnquiriesAdmin";
+import AdminGuard from "./components/AdminGuard";
+import RequireAuth from "./components/RequireAuth";
+import AddAdmin from "./pages/admin/AddAdmin.jsx";
 
 export default function App() {
   return (
     <Router>
-      <div style={{"background": "#F2E8E4"}}>
+      <div style={{ background: "#F2E8E4" }}>
         <Toaster position="top-center" />
         <Header />
 
@@ -32,7 +34,14 @@ export default function App() {
           <Route path="/interio" element={<InterioHome />} />
           <Route path="/catalog/:type" element={<Catalog />} />
           <Route path="/details/:type/:themeId" element={<Details />} />
-          <Route path="/enquiry" element={<Enquiry />} />
+          <Route
+            path="/enquiry"
+            element={
+              <RequireAuth>
+                <Enquiry />
+              </RequireAuth>
+            }
+          />
           <Route path="/login" element={<PhoneLoginModal />} />
 
           {/* --- Realty / Projects section --- */}
@@ -40,13 +49,18 @@ export default function App() {
           <Route path="/projects/:slug" element={<ProjectDetail />} />
 
           {/* --- Admin routes --- */}
-          <Route path="/admin" element={<DashboardLayout />}>
+          <Route
+            path="/admin"
+            element={
+              <AdminGuard><DashboardLayout /></AdminGuard>}
+          >
             <Route path="dashboard" element={<h2>Welcome Admin</h2>} />
-             <Route path="enquiries" element={<EnquiriesAdmin />} />
-            <Route path="import" element={<ImportProjects />} />
-            <Route path="projects" element={<ProjectsAdmin />} />
-            <Route path="projects/new" element={<ProjectForm />} />
-            <Route path="projects/:id" element={<ProjectForm />} />
+            <Route path="addadmins" element={<AddAdmin />} />
+            <Route path="enquiries" element={<AdminGuard><EnquiriesAdmin /></AdminGuard>} />
+            <Route path="import" element={<AdminGuard><ImportProjects /></AdminGuard>} />
+            <Route path="projects" element={<AdminGuard><ProjectsAdmin /></AdminGuard>} />
+            <Route path="projects/new" element={<AdminGuard><ProjectForm /></AdminGuard>} />
+            <Route path="projects/:id" element={<AdminGuard><ProjectForm /></AdminGuard>} />
             {/* other admin nested routes here */}
           </Route>
         </Routes>

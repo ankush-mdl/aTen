@@ -1,23 +1,20 @@
-// frontend/src/lib/api.js
-
+// src/lib/api.js
 const DEFAULT_DEV_BACKEND = "http://localhost:5000";
 
-// Auto-detect backend base
+/* -------------------------
+   Backend base resolver
+   ------------------------- */
 function getBackendBase() {
   if (typeof window === "undefined") return DEFAULT_DEV_BACKEND;
-
   const host = window.location.hostname;
-
-  // Development
-  if (host === "localhost" || host === "127.0.0.1") {
-    return DEFAULT_DEV_BACKEND;
-  }
-
-  // Production: assume backend is same origin OR set via env
-  const origin = window.location.origin;
-  return origin; // or use VITE_BACKEND_URL if using Vite
+  if (host === "localhost" || host === "127.0.0.1") return DEFAULT_DEV_BACKEND;
+  return "";
 }
+const BASE = getBackendBase();
 
+/* -------------------------
+   URL helpers
+   ------------------------- */
 function looksAbsoluteUrl(s) {
   if (!s) return false;
   const t = String(s).trim();
@@ -25,6 +22,9 @@ function looksAbsoluteUrl(s) {
   return /^https?:\/\//i.test(t) || /^\/\//.test(t) || t.includes("://");
 }
 
+/* -------------------------
+   Image helper (getImageUrl)
+   ------------------------- */
 export function getImageUrl(raw) {
   if (raw === null || raw === undefined) return null;
 
@@ -35,7 +35,7 @@ export function getImageUrl(raw) {
 
   if (looksAbsoluteUrl(s)) return s;
 
-  const base = getBackendBase();
+  const base = BASE || (typeof window !== "undefined" ? window.location.origin : "");
 
   // If path starts with /uploads, ensure base is prepended
   if (s.startsWith("/uploads/") || s.startsWith("uploads/")) {
@@ -52,4 +52,74 @@ export function getImageUrl(raw) {
   return `${base}${s}`;
 }
 
-export default { getImageUrl };
+/* -------------------------
+   Auth helpers + fetch wrappers
+   ------------------------- */
+
+/**
+ * getAuthToken - read token from localStorage (key: "auth_token")
+ */
+export function getAuthToken() {
+  try {
+    return localStorage.getItem("auth_token") || null;
+  } catch (e) {
+    console.warn("getAuthToken error", e);
+    return null;
+  }
+}
+
+/**
+ * sendWithAuth(rawPathOrUrl, opts)
+ * Explicit fetch that ALWAYS tries to attach Authorization header from localStorage.
+ * Returns { ok, status, data } where data is parsed JSON or raw text.
+ */
+export async function sendWithAuth(rawPathOrUrl, opts = {}) {
+  const url = looksAbsoluteUrl(rawPathOrUrl)
+    ? rawPathOrUrl
+    : `${BASE}${rawPathOrUrl.startsWith("/") ? "" : "/"}${rawPathOrUrl}`;
+
+  const token = getAuthToken();
+  const headers = new Headers(opts.headers || {});
+
+  // Set JSON header if not sending FormData and not already set
+  if (!headers.has("Content-Type") && !(opts.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  // Debug line (uncomment while debugging)
+  // console.log("[sendWithAuth] ->", url, "method:", (opts.method || "GET").toUpperCase(), "tokenPresent:", !!token);
+
+  const response = await fetch(url, { ...opts, headers, credentials: "include" });
+
+  const text = await response.text().catch(() => "");
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (e) {
+    data = text;
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    const err = new Error("Unauthorized");
+    err.status = response.status;
+    err.body = data;
+    throw err;
+  }
+
+  return { ok: response.ok, status: response.status, data };
+}
+
+/**
+ * apiFetch(path, opts)
+ * Thin wrapper over sendWithAuth (semantic).
+ */
+export async function apiFetch(path, opts = {}) {
+  return sendWithAuth(path, opts);
+}
+
+/* Default export (backwards compatibility) */
+export default { getImageUrl, getAuthToken, sendWithAuth, apiFetch };
