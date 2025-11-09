@@ -2,24 +2,6 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const rawOrigins = process.env.FRONTEND_ORIGINS || '';
-const ALLOWED_ORIGINS = rawOrigins.split(',').map(s => s.trim()).filter(Boolean);
-
-const app = express();
-const corsOptions = {
-  origin: function(origin, callback) {
-    if (!origin) return callback(null, true); // allow server-to-server or curl
-    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-    return callback(new Error('CORS error: Not allowed by CORS'), false);
-  },
-  credentials: true,
-  exposedHeaders: ['Authorization'],
-  allowedHeaders: ['Content-Type','Authorization','Accept','X-Requested-With','Origin'],
-  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
-  optionsSuccessStatus: 204
-};
-
-app.use(cors(corsOptions));
 const bodyParser = require("body-parser");
 const path = require("path");
 
@@ -39,12 +21,14 @@ const verifyFirebaseToken = require("./middleware/verifyFirebaseToken");
 const requireAdmin = require("./middleware/requireAdmin");
 const adminsRouter = require("./routes/addAdmin");
 
+const app = express();
 
 // Static uploads
 const UPLOADS_DIR = path.join(__dirname, "uploads");
 app.use("/uploads", express.static(UPLOADS_DIR, { maxAge: "7d" }));
 
-
+// ✅ CORS with env support
+app.use(cors())
 
 app.use(bodyParser.json());
 
