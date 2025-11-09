@@ -6,9 +6,11 @@ import { auth } from "../../firebaseConfig";
 import "../../assets/pages/admin/ImportProjects.css";
 
 const BACKEND_BASE =
-  typeof window !== "undefined" && window.location.hostname === "localhost"
+  import.meta.env.VITE_BACKEND_BASE ||
+  (typeof window !== "undefined" && window.location.hostname === "localhost"
     ? "http://localhost:5000"
-    : "";
+    : "");
+
 
 // ---- Helpers to get auth token safely ----
 async function getAuthToken({ timeoutMs = 3000, intervalMs = 150 } = {}) {

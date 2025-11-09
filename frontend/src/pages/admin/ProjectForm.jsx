@@ -27,11 +27,11 @@ function safeParseJson(v, fallback = []) {
 
 // Backend base: use localhost backend in dev, else same-origin
 const BACKEND_BASE =
-  typeof window !== "undefined" &&
-  window.location &&
-  window.location.hostname === "localhost"
+  import.meta.env.VITE_BACKEND_BASE ||
+  (typeof window !== "undefined" && window.location.hostname === "localhost"
     ? "http://localhost:5000"
-    : "";
+    : "");
+
 
 /* ----------------- auth helpers (safe polling + header builder) ----------------- */
 async function getAuthToken({ timeoutMs = 3000, intervalMs = 150 } = {}) {

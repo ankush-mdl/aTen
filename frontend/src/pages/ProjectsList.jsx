@@ -7,7 +7,11 @@ import { getImageUrl } from '../lib/api';
 import Dropdown from "../components/Dropdown";
 
 // Backend base: use localhost backend in dev, else same-origin
-const BACKEND_BASE = (typeof window !== "undefined" && window.location && window.location.hostname === "localhost") ? "http://localhost:5000" : "";
+const BACKEND_BASE =
+  import.meta.env.VITE_BACKEND_BASE ||
+  (typeof window !== "undefined" && window.location.hostname === "localhost"
+    ? "http://localhost:5000"
+    : "");
 
 function safeParse(jsonOrString, fallback = []) {
   if (jsonOrString === null || jsonOrString === undefined) return fallback;

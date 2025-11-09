@@ -7,9 +7,11 @@ import EnquiriesExportModal from "./EnquiriesExportModal";
 import { auth } from "../../firebaseConfig";
 
 const BACKEND_BASE =
-  typeof window !== "undefined" && window.location.hostname === "localhost"
+  import.meta.env.VITE_BACKEND_BASE ||
+  (typeof window !== "undefined" && window.location.hostname === "localhost"
     ? "http://localhost:5000"
-    : "";
+    : "");
+
 
 const DEFAULT_VISIBLE_COLS = [
   "enquiry_id",

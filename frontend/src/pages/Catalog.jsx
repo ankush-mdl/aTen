@@ -5,9 +5,11 @@ import toast from "react-hot-toast";
 
 /* backend base (dev -> localhost backend, else same-origin) */
 const BACKEND_BASE =
-  typeof window !== "undefined" && window.location && window.location.hostname === "localhost"
+  import.meta.env.VITE_BACKEND_BASE ||
+  (typeof window !== "undefined" && window.location.hostname === "localhost"
     ? "http://localhost:5000"
-    : "";
+    : "");
+
 
 /* options */
 const catalogOptions = {

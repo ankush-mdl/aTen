@@ -5,9 +5,11 @@ import "../assets/pages/ProjectDetail.css";
 import { getImageUrl } from "../lib/api";
 
 const BACKEND_BASE =
-  typeof window !== "undefined" && window.location.hostname === "localhost"
+  import.meta.env.VITE_BACKEND_BASE ||
+  (typeof window !== "undefined" && window.location.hostname === "localhost"
     ? "http://localhost:5000"
-    : "";
+    : "");
+
 
 function safeParseJson(v, fallback = []) {
   if (!v && v !== "") return fallback;
