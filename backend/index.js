@@ -1,7 +1,11 @@
 // backend/index.js
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
+const path = require("path");
+
+// Routes
 const enquiryRoutes = require("./routes/enquiryRoutes");
 const authRoutes = require("./routes/authRoutes");
 const adminRoutes = require("./routes/adminRoutes");
@@ -9,39 +13,32 @@ const kbEnquiryRoutes = require("./routes/kbEnquiryRoutes");
 const customEnquiryRoutes = require("./routes/customEnquiryRoutes");
 const projectsRoutes = require("./routes/projects");
 const uploads = require("./routes/uploads");
-const path = require("path");
 const importProjectsRouter = require("./routes/importProjects");
 const uploadsRouter = require("./routes/getUploads");
-const importImages = require("./routes/importImages")
+const importImages = require("./routes/importImages");
 const enquiries = require("./routes/enquiriesRoute");
 const verifyFirebaseToken = require("./middleware/verifyFirebaseToken");
 const requireAdmin = require("./middleware/requireAdmin");
 const adminsRouter = require("./routes/addAdmin");
 
-
-
 const app = express();
-const UPLOADS_DIR = path.join(__dirname, "uploads");
-app.use("/uploads", express.static(UPLOADS_DIR, {
-  maxAge: "7d",
-}));
 
-// CORS must be before routes
+// Static uploads
+const UPLOADS_DIR = path.join(__dirname, "uploads");
+app.use("/uploads", express.static(UPLOADS_DIR, { maxAge: "7d" }));
+
+// ✅ CORS with env support
 app.use(cors({
-  origin: ["http://localhost:5173", "http://127.0.0.1:5173"], // your frontend dev origins
+  origin: [
+    process.env.FRONTEND_ORIGIN,
+    process.env.SECOND_ORIGIN
+  ].filter(Boolean),
   credentials: true,
-  allowedHeaders: [
-    "Content-Type",
-    "Authorization",
-    "Accept",
-    "X-Requested-With",
-    "Origin"
-  ],
-  exposedHeaders: ["Authorization"],
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 }));
 
 app.use(bodyParser.json());
+
 
 // CRITICAL FIX: Static files MUST be served BEFORE API routes
 // This line needs to come early
@@ -90,7 +87,8 @@ app.get("/test-uploads", (req, res) => {
   });
 });
 
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
   

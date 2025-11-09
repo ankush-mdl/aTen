@@ -52,7 +52,6 @@ async function getAuthToken({ timeoutMs = 3000, intervalMs = 150 } = {}) {
 
 async function makeHeaders() {
     const token = await getAuthToken();
-    console.log(token);
     const headers = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
     return headers;

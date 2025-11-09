@@ -3,7 +3,7 @@ const admin = require("firebase-admin");
 const path = require("path");
 
 // Load service account path via env var or local path
-const keyPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || path.join(__dirname, "firebase-service-account.json");
+const keyPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(__dirname, "firebase-service-account.json");
 
 if (!admin.apps.length) {
   const serviceAccount = require(keyPath);
