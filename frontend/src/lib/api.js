@@ -1,13 +1,25 @@
 // src/lib/api.js
-const DEFAULT_DEV_BACKEND = "http://localhost:5000";
+// NOTE: Vite exposes env vars on import.meta.env (not process.env)
+const VITE_BACKEND = import.meta.env.VITE_BACKEND_BASE || "";
+
+// Default dev backend (used when explicitly running locally)
+const DEFAULT_DEV_BACKEND = VITE_BACKEND || "http://localhost:5000";
 
 /* -------------------------
    Backend base resolver
    ------------------------- */
 function getBackendBase() {
+  // Server-side (SSR) or bundling time: return DEFAULT_DEV_BACKEND
   if (typeof window === "undefined") return DEFAULT_DEV_BACKEND;
+
+  // If a build-time backend was provided (VITE_BACKEND), use it in the browser too
+  if (VITE_BACKEND) return VITE_BACKEND;
+
+  // Otherwise, detect local dev hostnames
   const host = window.location.hostname;
   if (host === "localhost" || host === "127.0.0.1") return DEFAULT_DEV_BACKEND;
+
+  // No explicit backend configured — use empty string so relative URLs point to same origin
   return "";
 }
 const BASE = getBackendBase();
@@ -56,9 +68,6 @@ export function getImageUrl(raw) {
    Auth helpers + fetch wrappers
    ------------------------- */
 
-/**
- * getAuthToken - read token from localStorage (key: "auth_token")
- */
 export function getAuthToken() {
   try {
     return localStorage.getItem("auth_token") || null;
@@ -68,11 +77,6 @@ export function getAuthToken() {
   }
 }
 
-/**
- * sendWithAuth(rawPathOrUrl, opts)
- * Explicit fetch that ALWAYS tries to attach Authorization header from localStorage.
- * Returns { ok, status, data } where data is parsed JSON or raw text.
- */
 export async function sendWithAuth(rawPathOrUrl, opts = {}) {
   const url = looksAbsoluteUrl(rawPathOrUrl)
     ? rawPathOrUrl
@@ -81,7 +85,6 @@ export async function sendWithAuth(rawPathOrUrl, opts = {}) {
   const token = getAuthToken();
   const headers = new Headers(opts.headers || {});
 
-  // Set JSON header if not sending FormData and not already set
   if (!headers.has("Content-Type") && !(opts.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
@@ -89,9 +92,6 @@ export async function sendWithAuth(rawPathOrUrl, opts = {}) {
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-
-  // Debug line (uncomment while debugging)
-  // console.log("[sendWithAuth] ->", url, "method:", (opts.method || "GET").toUpperCase(), "tokenPresent:", !!token);
 
   const response = await fetch(url, { ...opts, headers, credentials: "include" });
 
@@ -113,13 +113,8 @@ export async function sendWithAuth(rawPathOrUrl, opts = {}) {
   return { ok: response.ok, status: response.status, data };
 }
 
-/**
- * apiFetch(path, opts)
- * Thin wrapper over sendWithAuth (semantic).
- */
 export async function apiFetch(path, opts = {}) {
   return sendWithAuth(path, opts);
 }
 
-/* Default export (backwards compatibility) */
 export default { getImageUrl, getAuthToken, sendWithAuth, apiFetch };
