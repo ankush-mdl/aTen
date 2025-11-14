@@ -46,31 +46,36 @@ export const AuthProvider = ({ children }) => {
   }, [token]);
 
   // Called after Firebase phone auth is successful: send ID token to backend to create/return user
+// inside AuthContext.jsx - replace loginWithFirebaseIdToken with this version
 async function loginWithFirebaseIdToken(idToken) {
   setLoading(true);
   try {
     // Save token first so apiFetch will include it in Authorization header
     localStorage.setItem("auth_token", idToken);
 
-    // Call backend endpoint (apiFetch will attach header)
-    // If your backend expects POST body (e.g. name), include as needed.
     const res = await apiFetch("/auth", {
       method: "POST",
-      body: JSON.stringify({}) // empty body – backend will use verified token
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}) // backend reads token, so body can be empty
     });
 
     if (!res.ok) {
-      // backend rejected it — remove token and throw
       localStorage.removeItem("auth_token");
       throw new Error(res.data?.error || "Auth failed");
     }
 
-    // set user state using returned user from backend
-    setUser(res.data.user);
+    // backend returns res.data.user with shape { id, uid, phone, name, isAdmin }
+    const user = res.data.user;
+    if (!user || typeof user.id === "undefined") {
+      // defensive: if backend shape is unexpected, clear token and fail
+      localStorage.removeItem("auth_token");
+      throw new Error("Invalid auth response from server");
+    }
+
+    setUser(user);
     setToken(idToken);
-    return res.data.user;
+    return user;
   } catch (err) {
-    // On error, remove token and clear user
     localStorage.removeItem("auth_token");
     setUser(null);
     setToken(null);
@@ -79,6 +84,7 @@ async function loginWithFirebaseIdToken(idToken) {
     setLoading(false);
   }
 }
+
 
   function logout() {
     setUser(null);

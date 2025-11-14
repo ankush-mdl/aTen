@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import "../../assets/pages/admin/ProjectsAdmin.css";
 import showDeleteConfirm from "../../components/ConfirmDeleteToast";
+import { auth } from "../../firebaseConfig";
 
 const BACKEND_BASE =
   import.meta.env.VITE_BACKEND_BASE ||
@@ -15,6 +16,67 @@ function safeParse(arrOrStr) {
   if (!arrOrStr) return [];
   if (Array.isArray(arrOrStr)) return arrOrStr;
   try { return JSON.parse(arrOrStr); } catch { return []; }
+}
+
+// ---- Helpers to get auth token safely (copied/adapted from ImportProjects.jsx) ----
+async function getAuthToken({ timeoutMs = 3000, intervalMs = 150 } = {}) {
+  const start = Date.now();
+
+  // small helper to read storages safely
+  const readStored = () => {
+    try {
+      const l = localStorage.getItem("auth_token");
+      if (l && l !== "null" && l !== "") return l;
+    } catch (e) { /* ignore storage access errors */ }
+    return null;
+  };
+
+  while (Date.now() - start < timeoutMs) {
+    // 1) quick check storages
+    const stored = readStored();
+    if (stored) return stored;
+
+    // 2) try Firebase currentUser token if available
+    try {
+      if (auth && auth.currentUser) {
+        const idToken = await auth.currentUser.getIdToken(false); // don't force refresh first
+        if (idToken) {
+          // cache for future sync
+          try { localStorage.setItem("auth_token", idToken); } catch (e) {}
+          return idToken;
+        }
+      }
+    } catch (err) {
+      // non-fatal: firebase might not be ready yet
+    }
+
+    // wait briefly then retry
+    await new Promise((res) => setTimeout(res, intervalMs));
+  }
+
+  // final attempt with forced refresh from Firebase (in case cached token is stale)
+  try {
+    if (auth && auth.currentUser) {
+      const idToken = await auth.currentUser.getIdToken(true); // force refresh
+      if (idToken) {
+        try { localStorage.setItem("auth_token", idToken); } catch (e) {}
+        try { sessionStorage.setItem("auth_token", idToken); } catch (e) {}
+        return idToken;
+      }
+    }
+  } catch (err) {
+    // ignore
+  }
+
+  // nothing found within timeout
+  return null;
+}
+
+async function makeHeaders() {
+  const token = await getAuthToken();
+  const headers = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
 }
 
 export default function ProjectsAdmin() {
@@ -50,28 +112,45 @@ export default function ProjectsAdmin() {
 
   const performDelete = async (id) => {
     try {
-      const res = await fetch(`${BACKEND_BASE}/api/projects/${id}`, { method: "DELETE" });
+      setLoading(true);
+      const headers = await makeHeaders();
+      const res = await fetch(`${BACKEND_BASE}/api/projects/${id}`, {
+        method: "DELETE",
+        headers,
+      });
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
         throw new Error(`Delete failed ${res.status} ${txt}`);
       }
       toast.success("Deleted");
-      load();
+      await load();
     } catch (err) {
       console.error("Delete error:", err);
       toast.error("Delete failed");
+    } finally {
+      setLoading(false);
     }
   };
 
   const performBulkDelete = async (ids) => {
     try {
       setLoading(true);
-      // You can change this API depending on your backend endpoint (loop or batch)
+      const headers = await makeHeaders();
+
+      // If your backend supports batch delete endpoint, replace the loop with a single request.
       for (const id of ids) {
-        await fetch(`${BACKEND_BASE}/api/projects/${id}`, { method: "DELETE" });
+        const res = await fetch(`${BACKEND_BASE}/api/projects/${id}`, {
+          method: "DELETE",
+          headers,
+        });
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(`Delete failed for ${id} ${res.status} ${txt}`);
+        }
       }
+
       toast.success(`Deleted ${ids.length} project${ids.length > 1 ? "s" : ""}`);
-      load();
+      await load();
     } catch (err) {
       console.error("Bulk delete error:", err);
       toast.error("Bulk delete failed");

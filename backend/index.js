@@ -23,26 +23,45 @@ const adminsRouter = require("./routes/addAdmin");
 
 const app = express();
 
-// Static uploads
+// Static uploads - serve early
 const UPLOADS_DIR = path.join(__dirname, "uploads");
 app.use("/uploads", express.static(UPLOADS_DIR, { maxAge: "7d" }));
 
-// ✅ CORS with env support
-app.use(cors({
-  origin: [
-    process.env.FRONTEND_ORIGIN,
-    process.env.SECOND_ORIGIN
-  ].filter(Boolean),
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-}));
+// === CREDENTIALS-AWARE CORS CONFIGURATION ===
+// Set CLIENT_URL in your env (e.g. "http://localhost:5173").
+// You can provide a comma-separated list if you need multiple origins.
+const rawClientUrl = process.env.CLIENT_URL || "http://localhost:5173";
+const allowedOrigins = Array.isArray(rawClientUrl)
+  ? rawClientUrl
+  : String(rawClientUrl).split(",").map(s => s.trim()).filter(Boolean);
 
+const corsOptions = {
+  origin: (origin, callback) => {
+    // allow requests with no origin (like curl, mobile apps, server-to-server)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS policy: Origin ${origin} not allowed`));
+    }
+  },
+  credentials: true, // Access-Control-Allow-Credentials: true
+  optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
+// ensure preflight requests get the same CORS rules
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    // run the cors middleware for preflight and then continue
+    return cors(corsOptions)(req, res, next);
+  }
+  next();
+});
+
+// Body parser
 app.use(bodyParser.json());
-
-
-// CRITICAL FIX: Static files MUST be served BEFORE API routes
-// This line needs to come early
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Logging middleware
 app.use((req, res, next) => {
@@ -50,8 +69,7 @@ app.use((req, res, next) => {
   next();
 });
 
-
-// API Routes
+// API Routes (kept exactly as your original names/paths)
 app.use("/api/admins", adminsRouter);
 app.use("/api/admin", verifyFirebaseToken, requireAdmin, adminRoutes);
 app.use("/api/kb_enquiries", kbEnquiryRoutes);
@@ -65,6 +83,7 @@ app.use("/api/import-projects", importProjectsRouter);
 app.use("/api/uploads", uploadsRouter);
 app.use("/api/import-images", importImages);
 app.use("/api/enquiries", enquiries);
+
 // Root endpoint
 app.get("/", (req, res) => {
   res.send("A10 backend is running 🚀");

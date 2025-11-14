@@ -32,6 +32,7 @@ const BACKEND_BASE =
     ? "http://localhost:5000"
     : "");
 
+
 /* ----------------- auth helpers (safe polling + header builder) ----------------- */
 async function getAuthToken({ timeoutMs = 3000, intervalMs = 150 } = {}) {
   const start = Date.now();
