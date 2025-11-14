@@ -108,5 +108,20 @@ db.run(`
   )
 `);
 
+db.run(`
+  CREATE TABLE IF NOT EXISTS testimonials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    customer_phone TEXT,
+    review TEXT NOT NULL,
+    service_type TEXT,
+    isHome BOOLEAN DEFAULT 0,
+    page TEXT,
+    customer_type TEXT,
+    rating type INTEGER,
+    customer_image TEXT,   /* URL or filename */
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )
+`);
 
 module.exports = db;

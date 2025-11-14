@@ -3,7 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth, RecaptchaVerifier } from "firebase/auth";
 
 const firebaseConfig = {
- apiKey: "AIzaSyCdgGT-4UEpUBDsNBWAf8qdN2FHPOsw2v8",
+  apiKey: "AIzaSyCdgGT-4UEpUBDsNBWAf8qdN2FHPOsw2v8",
   authDomain: "a10interio-server.firebaseapp.com",
   projectId: "a10interio-server",
   storageBucket: "a10interio-server.firebasestorage.app",

@@ -20,6 +20,8 @@ import EnquiriesAdmin from "./pages/admin/EnquiriesAdmin";
 import AdminGuard from "./components/AdminGuard";
 import RequireAuth from "./components/RequireAuth";
 import AddAdmin from "./pages/admin/AddAdmin.jsx";
+import TestimonialsAdmin from "./pages/admin/TestimonialsAdmin.jsx";
+import SubmitTestimonial from "./pages/SubmitTestimonial.jsx";
 
 export default function App() {
   return (
@@ -34,6 +36,7 @@ export default function App() {
           <Route path="/interio" element={<InterioHome />} />
           <Route path="/catalog/:type" element={<Catalog />} />
           <Route path="/details/:type/:themeId" element={<Details />} />
+          <Route path="/testimonials" element={<SubmitTestimonial />} />
           <Route
             path="/enquiry"
             element={
@@ -57,6 +60,7 @@ export default function App() {
             <Route path="addadmins" element={<AddAdmin />} />
             <Route path="enquiries" element={<AdminGuard><EnquiriesAdmin /></AdminGuard>} />
             <Route path="import" element={<AdminGuard><ImportProjects /></AdminGuard>} />
+            <Route path="testimonials" element={<AdminGuard><TestimonialsAdmin /></AdminGuard>} />
             <Route path="projects" element={<AdminGuard><ProjectsAdmin /></AdminGuard>} />
             <Route path="projects/new" element={<AdminGuard><ProjectForm /></AdminGuard>} />
             <Route path="projects/:id" element={<AdminGuard><ProjectForm /></AdminGuard>} />

@@ -92,6 +92,8 @@ async function loginWithFirebaseIdToken(idToken) {
     try {
       localStorage.removeItem("user");
       localStorage.removeItem("auth_token");
+      localStorage.removeItem("login_name");
+      localStorage.removeItem("customer_phone");
     } catch (e) {}
   }
 

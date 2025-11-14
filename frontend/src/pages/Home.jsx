@@ -1,6 +1,13 @@
-import React from "react";
+// InterioHome.jsx (replace or merge into your existing file)
+import React, { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import "../assets/pages/Home.css";
+
+const BACKEND_BASE =
+  import.meta.env.VITE_BACKEND_BASE ||
+  (typeof window !== "undefined" && window.location.hostname === "localhost"
+    ? "http://localhost:5000"
+    : "");
 
 const homeTypes = [
   {
@@ -26,28 +33,64 @@ const homeTypes = [
   },
 ];
 
-const testimonials = [
-  {
-    name: "Riya Sharma",
-    role: "Buyer, Kolkata",
-    text:
-      "Aten made our home redesign effortless — the team understood our needs and delivered a stunning result on schedule.",
-  },
-  {
-    name: "Sourav Banerjee",
-    role: "Developer Partner",
-    text:
-      "Reliable, professional and detail-oriented. Their project delivery and communication are excellent.",
-  },
-  {
-    name: "Meera Patel",
-    role: "Home-owner",
-    text:
-      "From design to execution, every step was handled with care. Highly recommended for modern interiors.",
-  },
-];
-
 export default function InterioHome() {
+  const [testimonials, setTestimonials] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const trackRef = useRef(null);
+
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      setLoading(true);
+      setError("");
+      try {
+        const res = await fetch(`${BACKEND_BASE}/api/testimonials?limit=1000`);
+        if (!res.ok) throw new Error("Failed to load testimonials");
+        const j = await res.json();
+        const all = j.items || j || [];
+        // filter isHome truthy (1, true, "1")
+        const homeOnes = all.filter((t) => {
+          const v = t.isHome;
+          return v === 1 || v === true || String(v) === "1";
+        });
+        if (!mounted) return;
+        setTestimonials(homeOnes);
+      } catch (err) {
+        console.error(err);
+        if (mounted) setError("Could not load testimonials");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  function scrollByAmount(amount) {
+    const el = trackRef.current;
+    if (!el) return;
+    el.scrollBy({ left: amount, behavior: "smooth" });
+  }
+
+  function scrollNext() {
+    const el = trackRef.current;
+    if (!el) return;
+    const amount = Math.round(el.clientWidth * 0.8);
+    scrollByAmount(amount);
+  }
+  function scrollPrev() {
+    const el = trackRef.current;
+    if (!el) return;
+    const amount = Math.round(el.clientWidth * 0.8) * -1;
+    scrollByAmount(amount);
+  }
+
+  // per-card image
+  const logoSrc = "/atenlogo.png";
+
   return (
     <div className="home-page">
       <header className="home-hero">
@@ -82,7 +125,7 @@ export default function InterioHome() {
 
       <section className="about-section panel-card">
         <div className="about-inner">
-          <img src="/atenlogo.png" className="about-media" />
+          <img src="/atenlogo.png" className="about-media" alt="Aten logo" />
           <div className="about-content">
             <h2>About Aten</h2>
             <p>
@@ -101,20 +144,50 @@ export default function InterioHome() {
       </section>
 
       <section className="testimonials-section panel-card">
-        <h2>What our clients say</h2>
-        <div className="testimonials-grid">
-          {testimonials.map((t, i) => (
-            <figure className="testimonial-card" key={i}>
-              <blockquote>{t.text}</blockquote>
-              <figcaption>
-                <strong>{t.name}</strong>
-                <span className="muted"> — {t.role}</span>
-              </figcaption>
-            </figure>
-          ))}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <h2 style={{ margin: 0 }}>What our clients say</h2>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button aria-label="Scroll left" className="testimonial-arrow" onClick={scrollPrev}>‹</button>
+            <button aria-label="Scroll right" className="testimonial-arrow" onClick={scrollNext}>›</button>
+          </div>
         </div>
-      </section>
 
+        {loading ? (
+          <div style={{ padding: 24 }}>Loading…</div>
+        ) : error ? (
+          <div style={{ padding: 24, color: "crimson" }}>{error}</div>
+        ) : testimonials.length === 0 ? (
+          <div style={{ padding: 24 }}>No testimonials yet.</div>
+        ) : (
+          <div className="testimonials-track-wrap">
+            <div className="testimonials-track" ref={trackRef} role="list">
+              {testimonials.map((t) => {
+                const img = t.customer_image ? t.customer_image : logoSrc;
+                const role = t.service_type || t.role || "Customer";
+                return (
+                  <figure className="testimonial-card" key={t.id || t._id} role="listitem">
+                    <div className="testimonial-media">
+                      <img src={img} alt={`${t.name || "Customer"} photo`} onError={(e) => { e.currentTarget.src = logoSrc; }} />
+                    </div>
+                    <blockquote>{t.review || t.text}</blockquote>
+                    <figcaption>
+                      <strong>{t.name || "Anonymous"}</strong>
+                      <span className="muted"> — {role}</span>
+                      <div className="testimonial-rating">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <svg key={i} width="12" height="12" viewBox="0 0 24 24" fill={i < (t.rating || 0) ? "#a88441" : "none"} stroke="#a88441" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 .587l3.668 7.431L23.6 9.753l-5.8 5.654L19.335 24 12 19.897 4.665 24l1.535-8.593L.4 9.753l7.932-1.735z"/>
+                          </svg>
+                        ))}
+                      </div>
+                    </figcaption>
+                  </figure>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

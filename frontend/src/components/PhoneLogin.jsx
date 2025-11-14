@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { auth, createRecaptchaVerifier } from "../firebaseConfig";
 import { signInWithPhoneNumber } from "firebase/auth";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
 import "../assets/components/PhoneLogin.css";
@@ -16,8 +16,9 @@ export default function PhoneLogin() {
   const [step, setStep] = useState("input");
   const { loginWithFirebaseIdToken } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  localStorage.setItem("login_name", name);
+  // cleanup recaptcha on unmount
   useEffect(() => {
     return () => {
       try {
@@ -39,7 +40,6 @@ export default function PhoneLogin() {
   async function sendOtp() {
     const rawPhone = String(phone || "").trim();
     if (!rawPhone) return toast.error("Enter phone number");
-
     setLoading(true);
     try {
       const verifier = setupRecaptcha();
@@ -70,11 +70,40 @@ export default function PhoneLogin() {
       const result = await confirmation.confirm(code);
       const firebaseUser = result.user;
       const idToken = await firebaseUser.getIdToken();
+
+      // store idToken and call your backend auth handler
       localStorage.setItem("auth_token", idToken);
+
+      // optionally save name to localStorage
+      if (name && String(name).trim()) {
+        try { localStorage.setItem("login_name", String(name).trim()); } catch (e) {}
+      }
+
+      // store customer_phone so SubmitTestimonial picks it up
+      const normalizedPhone = firebaseUser.phoneNumber || phone;
+      if (normalizedPhone) {
+        try { localStorage.setItem("customer_phone", normalizedPhone); } catch (e) {}
+        if (typeof window !== "undefined") window.__CUSTOMER_PHONE__ = normalizedPhone;
+      }
+
+      // let app/context know about token
       await loginWithFirebaseIdToken(idToken);
-      toast.success("Logged in");// force refresh
-      setStep("done");
-      navigate("/");
+
+      toast.success("Logged in");
+
+      // Decide redirect target:
+      // - If we were navigated here with state.from that points to testimonial(s) page,
+      //   redirect to that path (preserve the intended page).
+      // - Otherwise, redirect to home "/".
+      const fromPath = location.state?.from?.pathname || "";
+      const cameFromTestimonial =
+        typeof fromPath === "string" &&
+         fromPath.includes("/testimonials");
+
+      const target = cameFromTestimonial ? fromPath : "/";
+
+      // navigate and replace so back-button doesn't go back to /login
+      navigate(target, { replace: true });
     } catch (err) {
       console.error("verifyOtp error", err);
       toast.error("OTP verification failed");
@@ -101,7 +130,7 @@ export default function PhoneLogin() {
             <input
               id="name"
               className="name-input"
-              placeholder="Your name"
+              placeholder="Your name (optional)"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
@@ -118,11 +147,7 @@ export default function PhoneLogin() {
               />
             </div>
 
-            <button
-              className="send-btn"
-              onClick={sendOtp}
-              disabled={loading}
-            >
+            <button className="send-btn" onClick={sendOtp} disabled={loading}>
               {loading ? "Sending..." : "Send OTP"}
             </button>
           </>
@@ -152,17 +177,9 @@ export default function PhoneLogin() {
           </>
         )}
 
-        {step === "done" && (
-          <div className="done-box">
-            <p>Login successful — redirecting...</p>
-            <button className="secondary-btn" onClick={() => navigate("/")}>Go to home</button>
-          </div>
-        )}
-
         <div id="recaptcha-container" />
 
-        <div className="login-note">
-        </div>
+        <div className="login-note" />
       </div>
     </div>
   );

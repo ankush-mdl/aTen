@@ -20,6 +20,8 @@ const enquiries = require("./routes/enquiriesRoute");
 const verifyFirebaseToken = require("./middleware/verifyFirebaseToken");
 const requireAdmin = require("./middleware/requireAdmin");
 const adminsRouter = require("./routes/addAdmin");
+const testimonials = require("./routes/testimonialsRoutes");
+const uploadTestimonialImage = require("./routes/uploadTestimonialImage");
 
 const app = express();
 
@@ -83,7 +85,8 @@ app.use("/api/import-projects", importProjectsRouter);
 app.use("/api/uploads", uploadsRouter);
 app.use("/api/import-images", importImages);
 app.use("/api/enquiries", enquiries);
-
+app.use("/api/upload-testimonial-image", uploadTestimonialImage);
+app.use("/api/testimonials", testimonials);
 // Root endpoint
 app.get("/", (req, res) => {
   res.send("A10 backend is running 🚀");
