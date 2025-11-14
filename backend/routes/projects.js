@@ -250,6 +250,35 @@ router.put("/:id", verifyFirebaseToken,  (req, res) => {
   });
 });
 
+
+/**
+ * GET /api/projects/:id
+ * Returns single project row with JSON fields parsed.
+ * Public endpoint (no auth) — add verifyFirebaseToken if you want it protected.
+ */
+router.get("/:id", (req, res) => {
+  const { id } = req.params;
+  db.get("SELECT * FROM projects WHERE id = ?", [id], (err, row) => {
+    if (err) {
+      console.error("Fetch project error:", err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!row) return res.status(404).json({ error: "Not found" });
+
+    // parse JSON/text columns so frontend receives structured data
+    const parsed = {
+      ...row,
+      configurations: row.configurations ? safeParse(row.configurations, []) : [],
+      highlights: row.highlights ? safeParse(row.highlights, []) : [],
+      amenities: row.amenities ? safeParse(row.amenities, []) : [],
+      gallery: row.gallery ? safeParse(row.gallery, []) : [],
+      price_info: row.price_info ? safeParse(row.price_info, null) : null,
+    };
+
+    res.json({ project: parsed });
+  });
+});
+
 /**
  * DELETE /api/projects/:id
  */
