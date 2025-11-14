@@ -133,7 +133,7 @@
 }
 
 .hover-menu button:hover {
-  background: linear-gradient(90deg, #a88441, #c8a968);
+  background: linear-gradient(90deg,#a88441,#c29f5b);
   color: #fff;
   transform: translateY(-3px);
   box-shadow: 0 12px 26px rgba(168, 132, 65, 0.3);
@@ -193,5 +193,18 @@
   .interio-section:hover .section-content h2 {
     transform: none;
     opacity: 1;
+  }
+  .interio-section:hover .hover-menu {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+  .interio-section::after {
+    transform: none;
+    transition: none ;
+  }
+  .hover-menu{
+    transition: none;
+    transform: ;
   }
 }

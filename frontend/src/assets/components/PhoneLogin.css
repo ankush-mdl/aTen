@@ -117,7 +117,7 @@
   font-weight: 700;
   cursor: pointer;
   transition: transform 0.08s ease, opacity 0.12s ease, box-shadow 0.08s ease;
-  background: #262421;
+  background: linear-gradient(90deg,#a88441,#c29f5b);
   color: #fff;
   display: inline-flex;
   align-items: center;

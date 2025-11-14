@@ -1,20 +1,35 @@
 // src/pages/admin/DashboardLayout.jsx
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import "../../assets/pages/admin/ProjectsAdmin.css"; // reuse admin CSS for layout basics
-import "../../assets/pages/admin/ProjectForm.css"; // optional - for form styles in nested route
+import "../../assets/pages/admin/ProjectsAdmin.css"; // keep existing admin CSS
+import "../../assets/pages/admin/ProjectForm.css";
+import "../../assets/pages/admin/Dashboard.css"; // new (or append the rules below)
 import { useAuth } from "../../context/AuthContext";
-import { auth } from "../../firebaseConfig";
 
 /**
  * DashboardLayout
- * - Sidebar navigation for admin sections
- * - Topbar with simple user / logout control
- * - Renders nested routes via <Outlet />
  */
 export default function DashboardLayout() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth?.() || {}; // graceful if useAuth is not provided
+  const { user, logout } = useAuth?.() || {};
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("admin_sidebar_collapsed");
+      setCollapsed(stored === "1");
+    } catch (e) {}
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((c) => {
+      const next = !c;
+      try {
+        localStorage.setItem("admin_sidebar_collapsed", next ? "1" : "0");
+      } catch (e) {}
+      return next;
+    });
+  };
 
   const handleLogout = async () => {
     try {
@@ -22,7 +37,6 @@ export default function DashboardLayout() {
     } catch (err) {
       /* ignore */
     }
-    // clear local storage user and navigate to login
     localStorage.removeItem("user");
     navigate("/login");
   };
@@ -31,139 +45,87 @@ export default function DashboardLayout() {
     isActive ? "admin-nav-link active" : "admin-nav-link";
 
   return (
-    <div
-      className="admin-shell"
-      style={{ display: "flex", height: "100vh", overflow: "hidden" }}
+    <div className={`dashboard-container admin-shell`}>
+      {/* Sidebar */}
+     <aside className={`sidebar ${collapsed ? "collapsed" : "open"}`} aria-expanded={!collapsed}>
+  
+  {/* TOP: Brand + Toggle */}
+  <div className="sidebar-top">
+    {!collapsed && (
+      <div className="sidebar-brand">
+        <h3>Admin</h3>
+        <div className="sidebar-user">{user?.name || "Administrator"}</div>
+      </div>
+    )}
+
+    <button
+      className="toggle-btn"
+      onClick={toggleCollapsed}
+      title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
     >
-      {/* SIDEBAR */}
-      <aside
-        style={{
-          width: 260,
-          padding: 20,
-          background: "#25261E",
-          borderRight: "1px solid rgba(15,23,42,0.04)",
-          boxShadow: "0 6px 20px rgba(2,6,23,0.04)",
-          position: "sticky", // keeps it fixed in the viewport
-          top: 0,
-          height: "100vh",
-          overflow: "hidden", // prevents sidebar scroll
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "start",
-        }}
-      >
-        <div style={{ marginBottom: 18 }}>
-          <h3 style={{ margin: 0, color: "#D9C4B8" }}>Admin Dashboard</h3>
-          <div style={{ color: "#F2E8E4", marginTop: 6, fontSize: 13 }}>
-            {user?.name || "Administrator"}
-          </div>
-        </div>
+      {collapsed ? "❯" : "❮"}
+    </button>
+  </div>
 
-        <nav style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <NavLink to="/admin/dashboard" className={activeClass}>
-            Dashboard
-          </NavLink>
+  {/* NAVIGATION only when NOT collapsed */}
+  {!collapsed && (
+    <>
+      <nav className="sidebar-links">
 
-          <div
-            style={{
-              marginTop: 8,
-              fontSize: 12,
-              color: "#F2E8E4",
-              fontWeight: 700,
-            }}
-          >
-            Realty
-          </div>
-          <NavLink to="/admin/projects" className={activeClass}>
-            Projects
-          </NavLink>
-          <NavLink to="/admin/projects/new" className={activeClass}>
-            Add Project
-          </NavLink>
-          
+        <div className="sidebar-section-label">Realty</div>
+        <NavLink to="/admin/projects" className={activeClass}>
+          Projects
+        </NavLink>
+        <NavLink to="/admin/projects/new" className={activeClass}>
+          Add Project
+        </NavLink>
 
-          {/* if you have other admin sections, add them here */}
-          <div
-            style={{
-              marginTop: 12,
-              fontSize: 12,
-              color: "#F2E8E4",
-              fontWeight: 700,
-            }}
-          >
-            Interio
-          </div>
-          <NavLink to="/admin/testimonials" className={activeClass}>
-            Testimonials
-          </NavLink>
-          <NavLink to="/admin/enquiries" className={activeClass}>
-            Interio Enquiries
-          </NavLink>
-          <NavLink to="/admin/addadmins" className={activeClass}>
-            Add Admins
-          </NavLink>
-        </nav>
+        <div className="sidebar-section-label">Interio</div>
+        <NavLink to="/admin/testimonials" className={activeClass}>
+          Testimonials
+        </NavLink>
+        <NavLink to="/admin/enquiries" className={activeClass}>
+          Interio Enquiries
+        </NavLink>
+        <NavLink to="/admin/addadmins" className={activeClass}>
+          Add Admins
+        </NavLink>
 
-        <div style={{ marginTop: 20 }}>
-          <button
-            onClick={() => navigate("/")}
-            style={{
-              width: "100%",
-              color: "#F2E8E4",
-              padding: "8px 10px",
-              borderRadius: 8,
-              border: "1px solid #F2E8E4",
-              background: "transparent",
-            }}
-          >
-            View site
-          </button>
-        </div>
-      </aside>
+        <div className="sidebar-section-label">Other</div>
+        <NavLink to="/admin/dashboard" className={activeClass}>
+          Dashboard Overview
+        </NavLink>
+        <NavLink to="/admin/import" className={activeClass}>
+          Bulk Import
+        </NavLink>
+        <button className="sidebar-viewsite" onClick={() => navigate("/")}>View site</button>
 
-      {/* MAIN CONTENT */}
-      <main
-        style={{
-          flex: 1,
-          padding: 22,
-          background: "#F2E8E4",
-          height: "100vh",
-          overflowY: "auto", // scroll only the main content
-        }}
-      >
-        <header
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 18,
-          }}
-        >
+      </nav>
+
+      {/* BOTTOM BUTTONS */}
+      <div className="sidebar-bottom">
+      </div>
+    </>
+  )}
+
+</aside>
+
+
+      {/* Main content */}
+      <main className={`dashboard-content ${collapsed ? "sidebar-collapsed" : ""}`}>
+        <header className="admin-topbar">
           <div>
-            <h2 style={{ margin: 0 }}>Admin</h2>
-            <div style={{ color: "#F2E8E4", marginTop: 4, fontSize: 13 }}>
-              Manage projects, enquiries and other site content
-            </div>
+            <h2 className="admin-title">Admin</h2>
+            <div className="admin-subtitle">Manage projects, enquiries and other site content</div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ color: "#0D0D0C" }}>{user?.phone || "—"}</div>
-            <button
-              onClick={handleLogout}
-              style={{
-                padding: 8,
-                borderRadius: 8,
-                border: "1px solid rgba(15,23,42,0.06)",
-                background: "transparent",
-              }}
-            >
-              Sign out
-            </button>
+          <div className="admin-actions">
+            <div className="admin-phone">{user?.phone || "—"}</div>
+            <button className="topbar-signout" onClick={handleLogout}>Sign out</button>
           </div>
         </header>
 
-        {/* Outlet for nested admin routes */}
-        <section style={{ background: "transparent" }}>
+        <section className="admin-content">
           <Outlet />
         </section>
       </main>

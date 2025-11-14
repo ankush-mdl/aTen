@@ -5,6 +5,7 @@ import "../../assets/pages/admin/EnquiriesAdmin.css";
 import toast from "react-hot-toast";
 import EnquiriesExportModal from "./EnquiriesExportModal";
 import { auth } from "../../firebaseConfig";
+import showDeleteConfirm from "../../components/ConfirmDeleteToast";
 
 const BACKEND_BASE =
   import.meta.env.VITE_BACKEND_BASE ||
@@ -21,7 +22,7 @@ const DEFAULT_VISIBLE_COLS = [
   "email",
   "city",
   "created_at",
-  "table",
+  "type",
   "area",
 ];
 
@@ -363,29 +364,39 @@ async function getAuthToken({ timeoutMs = 3000, intervalMs = 150 } = {}) {
   };
 
   const deleteRow = async (row) => {
-    const ok = window.confirm(`Delete enquiry ${row.enquiry_id} from ${row.table}? This cannot be undone.`);
-    if (!ok) return;
-    try {
-      const headers = await makeHeaders();
+  showDeleteConfirm({
+    title: "Delete Enquiry?",
+    message: `Delete enquiry #${row.enquiry_id} from "${row.table}"? This cannot be undone.`,
+    onConfirm: async () => {
+      try {
+        const headers = await makeHeaders();
 
-      const res = await fetch(`${BACKEND_BASE}/api/enquiries/${encodeURIComponent(row.table)}/${encodeURIComponent(row.enquiry_id)}`, {
-        method: "DELETE",
-        headers,
-        credentials: "include",
-      });
+        const res = await fetch(
+          `${BACKEND_BASE}/api/enquiries/${encodeURIComponent(
+            row.table
+          )}/${encodeURIComponent(row.enquiry_id)}`,
+          {
+            method: "DELETE",
+            headers,
+            credentials: "include",
+          }
+        );
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        toast.error("Delete failed: " + (err.error || res.status));
-      } else {
-        toast.success("Deleted");
-        refresh();
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          toast.error("Delete failed: " + (err.error || res.status));
+        } else {
+          toast.success("Deleted");
+          refresh();
+        }
+      } catch (err) {
+        console.error("delete err", err);
+        toast.error("Delete error");
       }
-    } catch (err) {
-      console.error("delete err", err);
-      toast.error("Delete error");
-    }
-  };
+    },
+  });
+};
+
 
   const renderCellVal = (row, key) => {
     const v = row[key];

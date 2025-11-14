@@ -24,7 +24,7 @@ import AddAdmin from "./pages/admin/AddAdmin.jsx";
 export default function App() {
   return (
     <Router>
-      <div style={{ background: "#F2E8E4" }}>
+      <div style={{ background: '#faf9f6'}}>
         <Toaster position="top-center" />
         <Header />
 
@@ -54,7 +54,6 @@ export default function App() {
             element={
               <AdminGuard><DashboardLayout /></AdminGuard>}
           >
-            <Route path="dashboard" element={<h2>Welcome Admin</h2>} />
             <Route path="addadmins" element={<AddAdmin />} />
             <Route path="enquiries" element={<AdminGuard><EnquiriesAdmin /></AdminGuard>} />
             <Route path="import" element={<AdminGuard><ImportProjects /></AdminGuard>} />

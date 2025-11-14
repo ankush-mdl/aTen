@@ -1,4 +1,4 @@
-
+/* src/assets/pages/admin/ProjectForm.css */
 
 /* outer shell */
 .project-form-shell {
@@ -353,3 +353,68 @@ input{
   line-height: 22px;
 }
 
+/* ---------------------- Video specific styles ---------------------- */
+
+/* video item sits in gallery-preview, reuse gallery-item but with specific tweaks */
+.video-item {
+  width: 180px;
+  height: 140px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: #000;
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: var(--shadow-sm);
+}
+
+/* top thumbnail area */
+.video-item .video-thumb {
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+  display: block;
+  background-size: cover;
+  background-position: center;
+}
+
+/* overlay play icon centered */
+.video-item .play-overlay {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.48);
+  border-radius: 50%;
+  padding: 10px 12px;
+  font-weight: 700;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  z-index: 2;
+}
+
+/* bottom control row: only two buttons (preview, remove) */
+.video-item .video-controls {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 6px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02));
+}
+
+.video-item .video-controls .btn {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+/* hide the direct URL display (user requested) - if present elsewhere */
+.video-item .video-url { display: none; }
+
+/* small responsive tweak */
+@media (max-width: 520px) {
+  .video-item { width: 100%; height: 160px; }
+  .video-item .video-thumb { height: 120px; }
+}

@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 import "../../assets/pages/admin/ProjectForm.css";
 import { getImageUrl } from "../../lib/api";
 import Dropdown from "../../components/Dropdown";
-import { auth } from "../../firebaseConfig"; // <- added
+import { auth } from "../../firebaseConfig"; // <- used for token fallback
 
 const emptyConfig = () => ({
   type: "3 BHK",
@@ -25,13 +25,12 @@ function safeParseJson(v, fallback = []) {
   }
 }
 
-// Backend base: use localhost backend in dev, else same-origin
+// Backend base: use VITE var or localhost in dev, else same-origin
 const BACKEND_BASE =
   import.meta.env.VITE_BACKEND_BASE ||
   (typeof window !== "undefined" && window.location.hostname === "localhost"
     ? "http://localhost:5000"
     : "");
-
 
 /* ----------------- auth helpers (safe polling + header builder) ----------------- */
 async function getAuthToken({ timeoutMs = 3000, intervalMs = 150 } = {}) {
@@ -89,6 +88,32 @@ async function makeHeaders({ forJson = false } = {}) {
 }
 /* ------------------------------------------------------------------------------- */
 
+/* ----------------- YouTube helpers ----------------- */
+function extractYouTubeId(url) {
+  if (!url) return null;
+  try {
+    const u = String(url).trim();
+    const patterns = [
+      /(?:youtube\.com\/.*(?:\?|&)v=)([a-zA-Z0-9_-]{6,})/, // v=VIDEO
+      /(?:youtu\.be\/)([a-zA-Z0-9_-]{6,})/,                 // youtu.be/VIDEO
+      /(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/,       // embed/VIDEO
+      /(?:youtube\.com\/v\/)([a-zA-Z0-9_-]{6,})/            // /v/VIDEO
+    ];
+    for (const re of patterns) {
+      const m = u.match(re);
+      if (m && m[1]) return m[1];
+    }
+    // fallback: plain id
+    if (/^[a-zA-Z0-9_-]{6,}$/.test(u)) return u;
+  } catch (err) {}
+  return null;
+}
+function makeYoutubeThumbUrl(id) {
+  if (!id) return "";
+  return `https://img.youtube.com/vi/${id}/maxresdefault.jpg`;
+}
+/* --------------------------------------------------- */
+
 export default function ProjectForm() {
   const { id } = useParams(); // "new" or numeric/id or slug
   const navigate = useNavigate();
@@ -98,7 +123,8 @@ export default function ProjectForm() {
 
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  // New state for developers dropdown
+
+  // Developers dropdown
   const [developersList, setDevelopersList] = useState([]); // { name, logo, description }
   const [developerSelected, setDeveloperSelected] = useState(""); // name or "custom"
 
@@ -129,6 +155,7 @@ export default function ProjectForm() {
     developer_name: "",
     developer_description: "",
     developer_logo: "",
+    videos: [], // new: array of { id, url, thumbnail }
   });
 
   const [amenityText, setAmenityText] = useState("");
@@ -140,63 +167,71 @@ export default function ProjectForm() {
   const [uploadsLoading, setUploadsLoading] = useState(false);
   const [selectedUploads, setSelectedUploads] = useState(new Set());
 
+  // YouTube inputs / preview
+  const [videoUrlText, setVideoUrlText] = useState("");
+  const [videoPreviewModal, setVideoPreviewModal] = useState(null); // { id, url, thumbnail } or null
+
   // ---- load developers list (dedupe) ----
   async function fetchDevelopersList() {
-    try {
-      let devs = [];
-      // Try dedicated endpoint first
-      try {
-        const headers = await makeHeaders();
-        const res = await fetch(`${BACKEND_BASE}/api/developers`, { headers });
-        if (res.ok) {
-          const body = await res.json().catch(() => null);
-          if (Array.isArray(body)) {
-            devs = body.map((d) => ({
-              name: d.name || d.developer_name || "",
-              logo: d.logo || d.developer_logo || "",
-              description: d.description || d.developer_description || "",
-            }));
-          }
-        } else {
-          // fallback to projects
-          throw new Error("no /api/developers");
-        }
-      } catch {
-        const headers = await makeHeaders();
-        const res2 = await fetch(`${BACKEND_BASE}/api/projects`, { headers });
-        if (!res2.ok) throw new Error("projects endpoint failed");
-        const pj = await res2.json().catch(() => ({ items: [] }));
-        const items = pj.items || pj || [];
-        const map = new Map();
-        for (const it of items) {
-          const name = (it.developer_name || it.developer || "").trim();
-          if (!name) continue;
-          if (!map.has(name)) {
-            map.set(name, {
-              name,
-              logo: it.developer_logo || it.logo || "",
-              description: it.developer_description || "",
-            });
-          }
-        }
-        devs = Array.from(map.values());
-      }
-
-      const uniq = [];
-      const seen = new Set();
-      for (const d of devs) {
-        if (!d || !d.name) continue;
-        const key = d.name.trim();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        uniq.push({ name: key, logo: d.logo || "", description: d.description || "" });
-      }
-      setDevelopersList(uniq);
-    } catch (err) {
-      console.warn("Could not load developers list:", err);
-      setDevelopersList([]);
+  try {
+    const headers = await makeHeaders();
+    const res = await fetch(`${BACKEND_BASE}/api/projects`, { headers });
+    if (!res.ok) {
+      throw new Error(`projects endpoint failed: ${res.status}`);
     }
+
+    const body = await res.json().catch(() => null);
+    // support both { items: [...] } and plain array responses
+    const rawItems = Array.isArray(body) ? body : (body && Array.isArray(body.items) ? body.items : []);
+
+    const map = new Map();
+    for (const it of rawItems) {
+      // robust extraction of developer name/logo/description from different shapes
+      const name =
+        (it && (
+          it.developer_name ||
+          it.developer ||
+          (it.developer && it.developer.name) ||
+          ""
+        ) || ""
+        ).toString().trim();
+
+      if (!name) continue;
+
+      const logo =
+        (it && (
+          it.developer_logo ||
+          it.logo ||
+          (it.developer && it.developer.logo) ||
+          ""
+        ) || "").toString().trim();
+
+      const description =
+        (it && (
+          it.developer_description ||
+          it.developer_description ||
+          (it.developer && it.developer.description) ||
+          ""
+        ) || "").toString().trim();
+
+      if (!map.has(name)) {
+        map.set(name, { name, logo, description });
+      }
+    }
+
+    const uniq = Array.from(map.values()).map(d => ({
+      name: d.name,
+      logo: d.logo || "",
+      description: d.description || ""
+    }));
+
+    setDevelopersList(uniq);
+  } catch (err) {
+    console.warn("Could not load developers list:", err);
+    setDevelopersList([]);
   }
+}
+
 
   useEffect(() => {
     fetchDevelopersList();
@@ -250,6 +285,7 @@ export default function ProjectForm() {
     const price_info = p.price_info && typeof p.price_info === "string"
       ? (() => { try { return JSON.parse(p.price_info); } catch { return p.price_info; } })()
       : p.price_info || null;
+    const videos = safeParseJson(p.videos || p.video || p.videos_json || [], []);
 
     setForm((prev) => ({
       ...prev,
@@ -278,6 +314,7 @@ export default function ProjectForm() {
       developer_name: p.developer_name || "",
       developer_description: p.developer_description || "",
       developer_logo: p.developer_logo || "",
+      videos: Array.isArray(videos) ? videos : [],
     }));
   }
 
@@ -315,7 +352,6 @@ export default function ProjectForm() {
 
   // ---- image upload (now accepts options) ----
   async function uploadFiles(files, options = {}) {
-    // options: { silent: boolean } - if silent skip some toasts
     if (!files || files.length === 0) return [];
     setUploading(true);
     const uploadedUrls = [];
@@ -325,7 +361,6 @@ export default function ProjectForm() {
         const formData = new FormData();
         formData.append("file", file);
 
-        // get only Authorization header; don't set Content-Type (browser must add boundary)
         const headers = await makeHeaders();
         if (headers["Content-Type"]) delete headers["Content-Type"];
 
@@ -399,11 +434,12 @@ export default function ProjectForm() {
       const headers = await makeHeaders();
       const res = await fetch(`${BACKEND_BASE}/api/uploads`, { headers });
       if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        console.warn("Primary /api/uploads failed:", res.status, txt);
-        // try alternative public endpoint (not guaranteed)
+        console.warn("Primary /api/uploads failed:", res.status);
         const alt = await fetch(`${BACKEND_BASE}/uploads`);
         if (!alt.ok) throw new Error(`Uploads listing failed`);
+        const altBody = await alt.json().catch(() => null);
+        if (Array.isArray(altBody)) setUploadsList(altBody);
+        else if (altBody && Array.isArray(altBody.files)) setUploadsList(altBody.files);
       } else {
         const body = await res.json().catch(() => null);
         let arr = [];
@@ -447,47 +483,100 @@ export default function ProjectForm() {
     setShowUploadsModal(false);
   };
 
-  // ---- submit ----
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!form.title || !form.city) {
-      toast.error("Please fill Title and City (required).");
+  // ---- YouTube video helpers ----
+  const addVideo = () => {
+    const raw = (videoUrlText || "").trim();
+    if (!raw) {
+      toast.error("Paste YouTube link first");
       return;
     }
-    setLoading(true);
-    const tid = toast.loading("Saving project...");
-    try {
-      // If any arrays are in JSON-string expected shape on server, server should handle
-      const payload = { ...form };
-
-      const method = id && id !== "new" ? "PUT" : "POST";
-      const url = id && id !== "new" ? `${BACKEND_BASE}/api/projects/${id}` : `${BACKEND_BASE}/api/projects`;
-
-      const headers = await makeHeaders({ forJson: true });
-
-      const res = await fetch(url, {
-        method,
-        headers,
-        body: JSON.stringify(payload),
-      });
-
-      if (res.ok) {
-        await res.json().catch(() => ({}));
-        toast.success("Project saved", { id: tid });
-        navigate("/admin/projects");
-      } else {
-        const err = await res.json().catch(() => ({}));
-        console.error("Save error", err);
-        const message = err.error || `Server responded ${res.status}`;
-        toast.error("Save failed: " + message, { id: tid });
-      }
-    } catch (err) {
-      console.error("Save error", err);
-      toast.error("Save failed: exception", { id: tid });
-    } finally {
-      setLoading(false);
+    const vid = extractYouTubeId(raw);
+    if (!vid) {
+      toast.error("Not a valid YouTube URL / id");
+      return;
     }
+
+    setForm((s) => {
+      const exists = (s.videos || []).some((v) => v.id === vid);
+      if (exists) {
+        toast.error("Video already added");
+        return s;
+      }
+      const thumbnail = makeYoutubeThumbUrl(vid);
+      const obj = { id: vid, url: `https://www.youtube.com/watch?v=${vid}`, thumbnail };
+      const newVideos = [...(s.videos || []), obj];
+      toast.success("Video added");
+      return { ...s, videos: newVideos };
+    });
+    setVideoUrlText("");
   };
+
+  const removeVideo = (idx) => {
+    setForm((s) => {
+      const newArr = (s.videos || []).filter((_, i) => i !== idx);
+      return { ...s, videos: newArr };
+    });
+    toast.success("Video removed");
+  };
+
+  const openVideoPreview = (video) => {
+    setVideoPreviewModal(video);
+  };
+
+  const closeVideoPreview = () => setVideoPreviewModal(null);
+
+  // ---- submit ----
+  const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (!form.title || !form.city) {
+    toast.error("Please fill Title and City (required).");
+    return;
+  }
+  setLoading(true);
+  const tid = toast.loading("Saving project...");
+  try {
+    // Serialize complex fields to JSON strings (server expects text)
+    const payload = {
+      ...form,
+      gallery: JSON.stringify(form.gallery || []),
+      highlights: JSON.stringify(form.highlights || []),
+      amenities: JSON.stringify(form.amenities || []),
+      configurations: JSON.stringify(form.configurations || []),
+      videos: JSON.stringify(form.videos || []),
+      price_info: form.price_info ? JSON.stringify(form.price_info) : null,
+    };
+
+    const method = id && id !== "new" ? "PUT" : "POST";
+    const url = id && id !== "new"
+      ? `${BACKEND_BASE}/api/projects/${id}`
+      : `${BACKEND_BASE}/api/projects`;
+
+    const headers = await makeHeaders({ forJson: true });
+
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    if (res.ok) {
+      await res.json().catch(() => ({}));
+      toast.success("Project saved", { id: tid });
+      navigate("/admin/projects");
+    } else {
+      const err = await res.json().catch(() => ({}));
+      console.error("Save error", err);
+      const message = err.error || `Server responded ${res.status}`;
+      toast.error("Save failed: " + message, { id: tid });
+    }
+  } catch (err) {
+    console.error("Save error", err);
+    toast.error("Save failed: exception", { id: tid });
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   // ---------- UI ----------
   return (
@@ -507,6 +596,7 @@ export default function ProjectForm() {
             <li><strong>Amenities</strong>: Add features (Gym, Pool) one at a time.</li>
             <li><strong>Highlights</strong>: Short selling bullets.</li>
             <li><strong>Gallery</strong>: Upload images (jpg/png). After upload you can choose a thumbnail image for listing cards.</li>
+            <li><strong>Videos</strong>: Add YouTube links for walkthroughs/promos — thumbnails will display and you can preview inline.</li>
             <li><strong>Metadata</strong>: Blocks, Units, Floors (used on detail page).</li>
             <li><strong>Thumbnail</strong>: The selected thumbnail is sent in the payload as <code>thumbnail</code>.</li>
           </ul>
@@ -638,6 +728,61 @@ export default function ProjectForm() {
               </div>
             ))}
             {form.gallery.length === 0 && <div className="placeholder">No images yet.</div>}
+          </div>
+        </div>
+
+        {/* YouTube Videos */}
+        <div className="panel">
+          <div className="panel-header">
+            <h4>Property Videos (YouTube)</h4>
+            <small>Add YouTube links for walkthroughs / promos. Thumbnails will be shown below.</small>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+            <input
+              value={videoUrlText}
+              onChange={(e) => setVideoUrlText(e.target.value)}
+              placeholder="Paste YouTube link or ID (e.g. https://youtu.be/VIDEOID)"
+              style={{ flex: "1 1 auto" }}
+            />
+            <button type="button" className="btn" onClick={addVideo}>Add Video</button>
+          </div>
+
+          <div className="gallery-preview" style={{ marginTop: 8 }}>
+            {form.videos && form.videos.length > 0 ? (
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+               {form.videos.map((v, i) => (
+  <div key={v.id || i} className="gallery-item video-item">
+    {/* thumbnail background */}
+    <div className="video-thumb-wrap" style={{ position: "relative", width: "100%", height: 110, overflow: "hidden" }}>
+      <img
+        className="video-thumb"
+        src={v.thumbnail}
+        alt={`video-${i}`}
+        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = `https://img.youtube.com/vi/${v.id}/hqdefault.jpg`; }}
+      />
+      <button
+        className="play-overlay"
+        type="button"
+        onClick={() => openVideoPreview(v)}
+        title="Play video"
+      >
+        ▶
+      </button>
+    </div>
+
+    {/* controls: only Preview & Remove */}
+    <div className="video-controls">
+      <button type="button" className="btn" onClick={() => openVideoPreview(v)}>Preview</button>
+      <button type="button" className="btn" onClick={() => removeVideo(i)}>Remove</button>
+    </div>
+  </div>
+))}
+
+              </div>
+            ) : (
+              <div className="placeholder">No videos added.</div>
+            )}
           </div>
         </div>
 
@@ -788,13 +933,13 @@ export default function ProjectForm() {
 
       {/* -------- Uploads modal (select existing) -------- */}
       {showUploadsModal && (
-        <div className="modal-backdrop" onClick={() => setShowUploadsModal(false)}>
+        <div className="modal-backdrop" onClick={() => { developerLogoModeRef.current = false; setShowUploadsModal(false); }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <h3 style={{ margin: 0 }}>Select images from uploads</h3>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn" onClick={() => setSelectedUploads(new Set())}>Clear</button>
-                <button className="btn" onClick={() => setShowUploadsModal(false)}>Close</button>
+                <button className="btn" onClick={() => { developerLogoModeRef.current = false; setShowUploadsModal(false); }}>Close</button>
               </div>
             </div>
 
@@ -836,7 +981,7 @@ export default function ProjectForm() {
             </div>
 
             <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 8 }}>
-              <button className="btn" onClick={() => setShowUploadsModal(false)}>Cancel</button>
+              <button className="btn" onClick={() => { developerLogoModeRef.current = false; setShowUploadsModal(false); }}>Cancel</button>
 
               <button className="btn primary" onClick={() => {
                 const picked = Array.from(selectedUploads || []);
@@ -864,6 +1009,31 @@ export default function ProjectForm() {
                 Add selected ({selectedUploads ? selectedUploads.size : 0})
               </button>
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Video preview modal */}
+      {videoPreviewModal && (
+        <div className="modal-backdrop" onClick={closeVideoPreview}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 900, width: "min(95%, 900px)", padding: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <h3 style={{ margin: 0 }}>Video preview</h3>
+              <div>
+                <button className="btn" onClick={closeVideoPreview}>Close</button>
+              </div>
+            </div>
+
+            <div style={{ position: "relative", paddingTop: "56.25%", background: "#000" }}>
+              <iframe
+                title="video-preview"
+                src={`https://www.youtube.com/embed/${videoPreviewModal.id}?autoplay=1`}
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
+              />
             </div>
           </div>
         </div>

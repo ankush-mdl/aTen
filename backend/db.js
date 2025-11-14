@@ -73,6 +73,7 @@ db.run(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE
   )
 `);
+// Create projects table
 db.run(`
   CREATE TABLE IF NOT EXISTS projects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,6 +91,7 @@ db.run(`
     floors TEXT,
     land_area TEXT,
     description TEXT,
+    videos TEXT, /* JSON array of video URLs */
     developer_name TEXT,
     developer_logo TEXT,
     developer_description TEXT,

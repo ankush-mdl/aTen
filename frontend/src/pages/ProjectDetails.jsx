@@ -10,9 +10,8 @@ const BACKEND_BASE =
     ? "http://localhost:5000"
     : "");
 
-
 function safeParseJson(v, fallback = []) {
-  if (!v && v !== "") return fallback;
+  if (v === undefined || v === null) return fallback;
   if (Array.isArray(v)) return v;
   try {
     return JSON.parse(v);
@@ -21,11 +20,39 @@ function safeParseJson(v, fallback = []) {
   }
 }
 
+// extract youtube id from url or id
+function extractYouTubeId(url) {
+  if (!url) return null;
+  try {
+    const u = String(url).trim();
+    const patterns = [
+      /(?:youtube\.com\/.*(?:\?|&)v=)([a-zA-Z0-9_-]{6,})/, // v=VIDEO
+      /(?:youtu\.be\/)([a-zA-Z0-9_-]{6,})/,                 // youtu.be/VIDEO
+      /(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/,       // embed/VIDEO
+      /(?:youtube\.com\/v\/)([a-zA-Z0-9_-]{6,})/            // /v/VIDEO
+    ];
+    for (const re of patterns) {
+      const m = u.match(re);
+      if (m && m[1]) return m[1];
+    }
+    // fallback: plain id
+    if (/^[a-zA-Z0-9_-]{6,}$/.test(u)) return u;
+  } catch (err) {}
+  return null;
+}
+function makeYoutubeThumbUrl(id) {
+  if (!id) return "";
+  return `https://img.youtube.com/vi/${id}/maxresdefault.jpg`;
+}
+
 export default function ProjectDetail() {
   const { slug } = useParams();
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lightboxIndex, setLightboxIndex] = useState(null);
+
+  // for video preview modal
+  const [videoPreviewId, setVideoPreviewId] = useState(null);
 
   useEffect(() => {
     if (!slug) return;
@@ -77,23 +104,57 @@ export default function ProjectDetail() {
         setLoading(false);
         return;
       }
+
+      // normalize gallery, highlights, amenities, configurations, videos
+      const gallery = safeParseJson(p.gallery, []);
+      const highlights = safeParseJson(p.highlights, []);
+      const amenities = safeParseJson(p.amenities, []);
+      const configurations = safeParseJson(p.configurations, []);
+      const price_info =
+        typeof p.price_info === "string"
+          ? (() => {
+              try {
+                return JSON.parse(p.price_info);
+              } catch {
+                return p.price_info || null;
+              }
+            })()
+          : p.price_info || null;
+
+      // videos may be stored as array of objects or array of ids/urls or JSON string
+      const rawVideos = safeParseJson(p.videos || p.video || p.videos_json || [], []);
+      const videos = Array.isArray(rawVideos)
+        ? rawVideos
+            .map((v) => {
+              // if it's object with id/url/thumbnail, normalize
+              if (v && typeof v === "object" && (v.id || v.url || v.thumbnail)) {
+                const id = v.id || extractYouTubeId(v.url) || extractYouTubeId(v.thumbnail) || null;
+                const url = v.url || (id ? `https://www.youtube.com/watch?v=${id}` : "");
+                const thumbnail = v.thumbnail || (id ? makeYoutubeThumbUrl(id) : "");
+                if (!id) return null;
+                return { id, url, thumbnail };
+              }
+              // if it's a plain string (id or url), extract id
+              if (typeof v === "string") {
+                const id = extractYouTubeId(v);
+                if (!id) return null;
+                return { id, url: `https://www.youtube.com/watch?v=${id}`, thumbnail: makeYoutubeThumbUrl(id) };
+              }
+              return null;
+            })
+            .filter(Boolean)
+        : [];
+
       const normalized = {
         ...p,
-        gallery: safeParseJson(p.gallery, []),
-        highlights: safeParseJson(p.highlights, []),
-        amenities: safeParseJson(p.amenities, []),
-        configurations: safeParseJson(p.configurations, []),
-        price_info:
-          typeof p.price_info === "string"
-            ? (() => {
-                try {
-                  return JSON.parse(p.price_info);
-                } catch {
-                  return p.price_info || null;
-                }
-              })()
-            : p.price_info || null,
+        gallery,
+        highlights,
+        amenities,
+        configurations,
+        price_info,
+        videos,
       };
+
       setProject(normalized);
       setLoading(false);
     };
@@ -106,12 +167,11 @@ export default function ProjectDetail() {
     return (
       <div style={{ padding: 24 }}>
         <div>Project not found.</div>
-         <div className="back-btn-container">
-        <Link to="/projects" className="back-btn">
-          Back to Projects
-        </Link>
-      </div>
-
+        <div className="back-btn-container">
+          <Link to="/projects" className="back-btn">
+            Back to Projects
+          </Link>
+        </div>
       </div>
     );
 
@@ -166,18 +226,31 @@ export default function ProjectDetail() {
               </a>
             )}
           </div>
+          
         </div>
+        <div className="overview-why">
+            <h3>Why Choose {project.title}</h3>
+            <p
+              dangerouslySetInnerHTML={{
+                __html:
+                  project.description ||
+                  project.long_description ||
+                  project.about ||
+                  "No description available.",
+              }}
+            />
+          </div>
       </div>
 
-      {/* Content grid: overview + sidebar */}
-      <div className="content-grid">
+      {/* Stack layout: all sections one after another */}
+      <div className="stacked-content">
+
         {/* Overview Section */}
         <section className="overview">
           <div className="overview-top">
             <h2>Project Overview</h2>
             <div className="overview-sub">
-              <strong>{project.location_area}</strong>
-              {project.city ? ` • ${project.city}` : ""}
+             
             </div>
           </div>
 
@@ -225,117 +298,170 @@ export default function ProjectDetail() {
             </div>
           </div>
 
-          <div className="overview-why">
-            <h3>Why Choose {project.title}</h3>
-            <p
-              dangerouslySetInnerHTML={{
-                __html:
-                  project.description ||
-                  project.long_description ||
-                  project.about ||
-                  "No description available.",
-              }}
-            />
-          </div>
+
+          {/* Videos under Overview (after Why Choose) */}
+          {project.videos && project.videos.length > 0 && (
+            <div className="overview-videos" style={{ marginTop: 18 }}>
+              <h3>Video Walkthroughs</h3>
+              <div className="overview-videos-grid">
+                {project.videos.map((v) => {
+                  const thumb = v.thumbnail || makeYoutubeThumbUrl(v.id || extractYouTubeId(v.url));
+                  return (
+                   <div
+  key={v.id}
+  className="overview-video-block"
+  role="button"
+  tabIndex={0}
+  onClick={() => setVideoPreviewId(v.id)}
+  onKeyDown={(e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      setVideoPreviewId(v.id);
+    }
+  }}
+  title="Click to play video"
+>
+  <img
+    className="overview-video-thumb"
+    src={thumb}
+    alt={`video-${v.id}`}
+    loading="lazy"
+    onError={(e) => {
+      e.currentTarget.onerror = null;
+      e.currentTarget.src = `https://img.youtube.com/vi/${v.id}/hqdefault.jpg`;
+    }}
+  />
+
+  {/* Play overlay */}
+  <div className="play-overlay-icon" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="34" height="34" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+      <path d="M8 5v14l11-7z" fill="currentColor" />
+    </svg>
+  </div>
+</div>
+
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </section>
 
-        {/* Sidebar / Highlights */}
-        <aside className="sidebar wide-sidebar">
-          <div className="sidebar-inner">
-            <h3>Highlights</h3>
-            <ul>
-              {(project.highlights || []).map((h, i) => (
+        {/* Amenities (moved before Highlights) */}
+        <section className="amenities-panel panel-card">
+          <h3>Amenities</h3>
+          {project.amenities && project.amenities.length > 0 ? (
+            <div className="amenities-grid">
+              {project.amenities.map((a, i) => (
+                <div key={i} className="amenity-chip">{a}</div>
+              ))}
+            </div>
+          ) : (
+            <p className="placeholder">No amenities listed.</p>
+          )}
+        </section>
+
+        {/* Highlights */}
+        <section className="highlights-panel panel-card">
+          <h3>Highlights</h3>
+          {project.highlights && project.highlights.length > 0 ? (
+            <ul className="highlights-list">
+              {project.highlights.map((h, i) => (
                 <li key={i}>{h}</li>
               ))}
             </ul>
-
-            <h3>Configurations</h3>
-            {(project.configurations || []).length > 0 ? (
-              <div className="config-table-wrapper">
-                <table className="config-table">
-                  <thead>
-                    <tr>
-                      <th>Type</th>
-                      <th>Size (sqft)</th>
-                      <th>Price Range (in Lakh)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(project.configurations || []).map((c, i) => (
-                      <tr key={i}>
-                        <td>{c.type || "—"}</td>
-                        <td>
-                          {c.size_min && c.size_max
-                            ? `${c.size_min} - ${c.size_max}`
-                            : c.size_min || c.size_max || "—"}
-                        </td>
-                        <td>
-                          {c.price_min && c.price_max
-                            ? `${c.price_min} - ${c.price_max}`
-                            : c.price_min || c.price_max || "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="no-config">No configurations available.</p>
-            )}
-          </div>
-        </aside>
-      </div>
-
-      {/* Developer Details (Full Width Card) */}
-{project.developer_name && (
-  <section className="developer-card">
-    <h2>Developer Details</h2>
-    <div className="developer-card-inner">
-      {project.developer_logo && (
-        <div className="developer-card-logo">
-          <img
-            src={getImageUrl(project.developer_logo)}
-            alt={project.developer_name}
-          />
-        </div>
-      )}
-
-      <div className="developer-card-info">
-        <h3 className="developer-card-title">{project.developer_name}</h3>
-        <p className="developer-card-desc">
-          {project.developer_description || "Trusted real estate developer."}
-        </p>
-      </div>
-    </div>
-  </section>
-)}
-
-
-      {/* Gallery */}
-      {gallery.length > 0 && (
-        <section className="gallery-section">
-          <h2 className="section-title">Gallery</h2>
-          <div className="gallery">
-            {gallery.map((g, i) => (
-              <img
-                key={i}
-                src={getImageUrl(g)}
-                alt={`${project.title}-${i}`}
-                onClick={() => setLightboxIndex(i)}
-                className="gallery-img"
-              />
-            ))}
-          </div>
+          ) : (
+            <p className="placeholder">No highlights available.</p>
+          )}
         </section>
-      )}
 
-      <div className="back-btn-container">
-        <Link to="/projects" className="back-btn">
-          Back to Projects
-        </Link>
+        {/* Configurations */}
+        <section className="configs-panel panel-card">
+          <h3>Configurations</h3>
+          {(project.configurations || []).length > 0 ? (
+            <div className="config-table-wrapper">
+              <table className="config-table">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Size (sqft)</th>
+                    <th>Price Range</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(project.configurations || []).map((c, i) => (
+                    <tr key={i}>
+                      <td>{c.type || "—"}</td>
+                      <td>
+                        {c.size_min && c.size_max
+                          ? `${c.size_min} - ${c.size_max}`
+                          : c.size_min || c.size_max || "—"}
+                      </td>
+                      <td>
+                        {c.price_min && c.price_max
+                          ? `${c.price_min} - ${c.price_max}`
+                          : c.price_min || c.price_max || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="no-config">No configurations available.</p>
+          )}
+        </section>
+
+        {/* Developer Details (Full Width Card) */}
+        {project.developer_name && (
+          <section className="developer-card panel-card">
+            <h3>Developer Details</h3>
+            <div className="developer-card-inner">
+              {project.developer_logo && (
+                <div className="developer-card-logo">
+                  <img
+                    src={getImageUrl(project.developer_logo)}
+                    alt={project.developer_name}
+                  />
+                </div>
+              )}
+
+              <div className="developer-card-info">
+                <h3 className="developer-card-title">{project.developer_name}</h3>
+                <p className="developer-card-desc">
+                  {project.developer_description || "Trusted real estate developer."}
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Gallery */}
+        {gallery.length > 0 && (
+          <section className="gallery-section panel-card">
+            <h3 className="section-title">Gallery</h3>
+            <div className="gallery">
+              {gallery.map((g, i) => (
+                <img
+                  key={i}
+                  src={getImageUrl(g)}
+                  alt={`${project.title}-${i}`}
+                  onClick={() => setLightboxIndex(i)}
+                  className="gallery-img"
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        <div className="back-btn-container" style={{ marginBottom: 36 }}>
+          <Link to="/projects" className="back-btn">
+            Back to Projects
+          </Link>
+        </div>
       </div>
 
-      {/* Lightbox */}
+      {/* Lightbox for gallery images */}
       {lightboxIndex !== null && (
         <div
           className="lightbox-overlay"
@@ -376,6 +502,23 @@ export default function ProjectDetail() {
               </button>
             </>
           )}
+        </div>
+      )}
+
+      {/* Video preview modal */}
+      {videoPreviewId && (
+        <div className="lightbox-overlay" onClick={() => setVideoPreviewId(null)}>
+          <button className="lightbox-close" onClick={() => setVideoPreviewId(null)}>✕</button>
+          <div style={{ width: "90%", maxWidth: 1000, aspectRatio: "16/9", background: "#000" }}>
+            <iframe
+              title="video-preview"
+              src={`https://www.youtube.com/embed/${videoPreviewId}?autoplay=1`}
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              style={{ width: "100%", height: "100%" }}
+            />
+          </div>
         </div>
       )}
     </div>
