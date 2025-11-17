@@ -12,6 +12,8 @@ dist-ssr
 firebase-service-account.json
 node_modules
 .env
+db.sqlite
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
