@@ -30,25 +30,23 @@ const UPLOADS_DIR = path.join(__dirname, "uploads");
 app.use("/uploads", express.static(UPLOADS_DIR, { maxAge: "7d" }));
 
 // === CREDENTIALS-AWARE CORS CONFIGURATION ===
-// Set CLIENT_URL in your env (e.g. "http://localhost:5173").
-// You can provide a comma-separated list if you need multiple origins.
-const rawClientUrl = process.env.CLIENT_URL || "http://localhost:5173";
+
+const rawClientUrl = process.env.CLIENT_URL;
 const allowedOrigins = Array.isArray(rawClientUrl)
   ? rawClientUrl
   : String(rawClientUrl).split(",").map(s => s.trim()).filter(Boolean);
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // allow requests with no origin (like curl, mobile apps, server-to-server)
-    if (!origin) return callback(null, true);
-
+    console.log('CORS origin header:', origin);
+    if (!origin) return callback(null, true); // allow curl, mobile, server-to-server
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
       callback(new Error(`CORS policy: Origin ${origin} not allowed`));
     }
   },
-  credentials: true, // Access-Control-Allow-Credentials: true
+  credentials: true,
   optionsSuccessStatus: 200,
 };
 
