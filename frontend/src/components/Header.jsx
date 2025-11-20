@@ -8,7 +8,8 @@ export default function Navbar() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const hamburgerRef = useRef(null);
-
+  const users = JSON.parse(localStorage.getItem("user"));
+  const isAdmin = users?.isAdmin;
   const closeMenu = () => setMenuOpen(false);
 
   const handleNavClick = (path) => {
@@ -70,6 +71,9 @@ export default function Navbar() {
         </button>
 
         <div className={`nav-links ${menuOpen ? "open" : ""}`} aria-hidden={!menuOpen && window.innerWidth <= 768}>
+           {isAdmin &&<Link to="/admin" onClick={() => closeMenu()}>
+            <span className="whatsapp-no">Admin</span>
+          </Link>}
           <Link to="/" onClick={() => closeMenu()}>
             <img className="whatsapp" src="/whatsapp.png" alt="WhatsApp" />
             <span className="whatsapp-no">9903611999</span>
