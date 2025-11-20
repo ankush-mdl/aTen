@@ -1,54 +1,23 @@
 // server/routes/enquiriesRoutes.js
 const express = require("express");
-const db = require("../db");
+const supabase = require("../supabase");
 const verifyFirebaseToken = require("../middleware/verifyFirebaseToken");
 
 const router = express.Router();
 
-// promise wrapper for db.all
-function allAsync(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) return reject(err);
-      resolve(rows || []);
-    });
-  });
+// protect all routes
+router.use(verifyFirebaseToken);
+
+// Helper: normalize phone by removing non-digits
+function normalizeDigits(s) {
+  if (!s && s !== 0) return null;
+  return String(s).replace(/\D/g, "");
 }
 
-// promise wrapper for db.run (for updates/deletes)
-function runAsync(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-      if (err) return reject(err);
-      resolve({ changes: this.changes, lastID: this.lastID });
-    });
-  });
-}
-
-/**
- * TABLE_MAP config:
- * - table: actual DB table
- * - cols: columns to select (alias e.id -> enquiry_id)
- * - editable: columns allowed for update (exclude created_at & primary id)
- */
+// Map TABLE_MAP for metadata (table name + editable fields)
 const TABLE_MAP = {
   home: {
     table: "home_enquiries",
-    cols: [
-      "e.id AS enquiry_id",
-      "e.user_id",
-      "u.name",
-      "u.phone AS user_phone",
-      "e.email",
-      "e.city",
-      "e.type",
-      "e.bathroom_number",
-      "e.kitchen_type",
-      "e.material",
-      "e.area",
-      "e.theme",
-      "e.created_at",
-    ],
     editable: [
       "user_id",
       "email",
@@ -63,36 +32,10 @@ const TABLE_MAP = {
   },
   custom: {
     table: "custom_enquiries",
-    cols: [
-      "e.id AS enquiry_id",
-      "e.user_id",
-      "u.name",
-      "u.phone AS user_phone",
-      "e.email",
-      "e.type",
-      "e.city",
-      "e.area",
-      "e.message",
-      "e.created_at",
-    ],
     editable: ["user_id", "email", "type", "city", "area", "message"],
   },
   kb: {
     table: "kb_enquiries",
-    cols: [
-      "e.id AS enquiry_id",
-      "e.user_id",
-      "u.name",
-      "u.phone AS user_phone",
-      "e.email",
-      "e.type",
-      "e.city",
-      "e.area",
-      "e.bathroom_type",
-      "e.kitchen_type",
-      "e.kitchen_theme",
-      "e.created_at",
-    ],
     editable: [
       "user_id",
       "email",
@@ -106,33 +49,61 @@ const TABLE_MAP = {
   },
 };
 
-// Helper: query single table
-function buildSelectSqlFor(key) {
-  const meta = TABLE_MAP[key];
-  if (!meta) return null;
-  return `
-    SELECT ${meta.cols.join(", ")}
-    FROM ${meta.table} e
-    LEFT JOIN users u ON e.user_id = u.id
-    ORDER BY e.created_at DESC
-  `;
+// Helper: map a raw Supabase row into expected output fields based on tableKey
+function mapRowToOutput(tableKey, row) {
+  // row contains fields of enquiry and a nested users object when selected with users(...)
+  const users = row.users || row.user || null; // handle possible naming
+  return {
+    enquiry_id: row.id,
+    user_id: row.user_id ?? null,
+    name: users?.name ?? null,
+    user_phone: users?.phone ?? null,
+    email: row.email ?? null,
+    city: row.city ?? null,
+    type: row.type ?? null,
+    bathroom_number: row.bathroom_number ?? null,
+    kitchen_type: row.kitchen_type ?? null,
+    material: row.material ?? null,
+    area: row.area ?? null,
+    theme: row.theme ?? null,
+    message: row.message ?? null,
+    bathroom_type: row.bathroom_type ?? null,
+    kitchen_theme: row.kitchen_theme ?? null,
+    created_at: row.created_at ?? null,
+    // keep raw row attached for debugging if needed
+    _raw: row,
+    table: tableKey,
+  };
 }
 
 /**
  * GET /api/enquiries?table=home|custom|kb
  * Returns JSON { items: [ ...rows ] }.
- * NOTE: frontend will provide one of the three table values (no "all")
  */
-router.get("/", verifyFirebaseToken,  async (req, res) => {
+router.get("/", async (req, res) => {
   try {
-    const table = (req.query.table || "").trim();
-    if (!table || !TABLE_MAP[table]) {
-      return res.status(400).json({ error: "Invalid or missing table. Use home|custom|kb" });
+    const tableKey = (req.query.table || "").trim();
+    if (!tableKey || !TABLE_MAP[tableKey]) {
+      return res
+        .status(400)
+        .json({ error: "Invalid or missing table. Use home|custom|kb" });
     }
-    const sql = buildSelectSqlFor(table);
-    const rows = await allAsync(sql, []);
-    // annotate each row with table for frontend convenience
-    const annotated = (rows || []).map((r) => ({ ...r, table: table }));
+
+    const table = TABLE_MAP[tableKey].table;
+
+    // select enquiry fields + nested users (left join)
+    // use users(name, phone) to fetch user info
+    const { data, error } = await supabase
+      .from(table)
+      .select("*, users(name, phone)")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("GET /api/enquiries supabase error:", error);
+      return res.status(500).json({ error: "server error" });
+    }
+
+    const annotated = (data || []).map((r) => mapRowToOutput(tableKey, r));
     return res.json({ items: annotated });
   } catch (err) {
     console.error("GET /api/enquiries error:", err);
@@ -142,71 +113,85 @@ router.get("/", verifyFirebaseToken,  async (req, res) => {
 
 /**
  * GET /api/enquiries/related?user_id=... | ?phone=... | ?email=...
- * Strict matching:
- * - If user_id present: match e.user_id = ?
- * - Otherwise phone: normalize digits and match EXACT equality to users.phone digits
- * - Otherwise email: lower-case and match exact equality to users.email or e.email
- *
  * Returns { items: [ ... ] } from all three tables (deduped)
  */
-router.get("/related", verifyFirebaseToken, async (req, res) => {
+router.get("/related", async (req, res) => {
   try {
     const { user_id, phone, email } = req.query;
     if (!user_id && !phone && !email) {
-      return res.status(400).json({ error: "Provide user_id or phone or email as query params" });
+      return res
+        .status(400)
+        .json({ error: "Provide user_id or phone or email as query params" });
     }
 
-    const normPhone = phone ? String(phone).replace(/\D/g, "") : null;
+    const normPhone = phone ? normalizeDigits(phone) : null;
     const normEmail = email ? String(email).trim().toLowerCase() : null;
 
-    // Build queries per table depending on provided identifier.
-    const queries = Object.keys(TABLE_MAP).map((k) => {
-      const meta = TABLE_MAP[k];
-      // start select
-      const colsSql = meta.cols.join(", ");
-      let where = [];
-      let params = [];
+    // If phone provided, find matching user ids by normalizing stored user.phone
+    let matchedUserIds = null;
+    if (normPhone) {
+      const { data: usersList, error: usersErr } = await supabase
+        .from("users")
+        .select("id, phone");
+      if (usersErr) {
+        console.error("Error fetching users for phone match:", usersErr);
+        return res.status(500).json({ error: "server error" });
+      }
+      matchedUserIds = (usersList || [])
+        .filter((u) => {
+          const stored = normalizeDigits(u.phone);
+          return stored && stored === normPhone;
+        })
+        .map((u) => u.id);
+    }
+
+    // Helper to query a specific enquiries tableKey with identifiers
+    async function queryTableFor(tableKey) {
+      const table = TABLE_MAP[tableKey].table;
+
+      // Build supabase query
+      // We'll try to use server-side filters where possible:
+      // - If user_id provided => eq('user_id', user_id)
+      // - Else if matchedUserIds (from phone) => in('user_id', matchedUserIds)
+      // - Else if normEmail provided => use or() to match e.email or users.email
+      let query = supabase.from(table).select("*, users(name, phone)").order("created_at", { ascending: false });
 
       if (user_id) {
-        where.push("e.user_id = ?");
-        params.push(user_id);
-      } else {
-        // strict phone equality: normalize stored u.phone (remove non-digits) and compare equals
-        if (normPhone) {
-          // sanitize u.phone in SQL using nested REPLACE
-          const sanitizedPhoneExpr = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(u.phone,''), '+', ''), ' ', ''), '-', ''), '(', ''), ')', '')";
-          where.push(`${sanitizedPhoneExpr} = ?`);
-          params.push(normPhone);
+        query = query.eq("user_id", user_id);
+      } else if (normPhone) {
+        if (matchedUserIds.length === 0) {
+          // no matching users, return empty
+          return [];
         }
-        if (normEmail) {
-          where.push("LOWER(IFNULL(u.email,'')) = ? OR LOWER(IFNULL(e.email,'')) = ?");
-          params.push(normEmail, normEmail);
-        }
+        query = query.in("user_id", matchedUserIds);
+      } else if (normEmail) {
+        // use or to match either enquiry.email or users.email
+        // PostgREST expects or filter like: or=(email.eq.value,users.email.eq.value)
+        // supabase-js supports .or() method; note: value must be URL-encoded by library
+        const orExpr = `email.eq.${normEmail},users.email.eq.${normEmail}`;
+        query = query.or(orExpr);
       }
 
-      const whereClause = where.length ? `WHERE (${where.join(" OR ")})` : "";
-      const sql = `
-        SELECT ${colsSql}
-        FROM ${meta.table} e
-        LEFT JOIN users u ON e.user_id = u.id
-        ${whereClause}
-        ORDER BY e.created_at DESC
-      `;
-      return { key: k, sql, params };
-    });
+      const { data: rows, error } = await query;
+      if (error) {
+        // If or() used and fails for some reason, fallback to fetching all and filtering client-side
+        console.error(`Query error for ${table}:`, error);
+        throw error;
+      }
+      return rows || [];
+    }
 
-    const results = await Promise.all(queries.map((q) => allAsync(q.sql, q.params)));
-    let combined = results.flat().map((r, idx) => {
-      // try to detect its original table by matching columns? We'll trust our queries and annotate by index mapping
-      return r;
-    });
+    // Run queries for all three tables
+    const keys = Object.keys(TABLE_MAP);
+    const resultsByTable = await Promise.all(keys.map((k) => queryTableFor(k)));
 
-    // Annotate each row with table correctly: we can recompute by running queries sequentially and tagging
+    // Tag each row with table and map to expected fields
     const tagged = [];
-    for (let i = 0; i < queries.length; i++) {
-      const rows = await allAsync(queries[i].sql, queries[i].params);
-      for (const row of rows) {
-        tagged.push({ ...row, table: queries[i].key });
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      const rows = resultsByTable[i] || [];
+      for (const r of rows) {
+        tagged.push(mapRowToOutput(k, r));
       }
     }
 
@@ -232,7 +217,7 @@ router.get("/related", verifyFirebaseToken, async (req, res) => {
  * PUT /api/enquiries/:table/:id
  * Update allowed columns for a given enquiry
  */
-router.put("/:table/:id", verifyFirebaseToken, async (req, res) => {
+router.put("/:table/:id", async (req, res) => {
   try {
     const tableKey = (req.params.table || "").trim();
     const id = req.params.id;
@@ -241,37 +226,37 @@ router.put("/:table/:id", verifyFirebaseToken, async (req, res) => {
     const editable = TABLE_MAP[tableKey].editable || [];
     const payload = req.body || {};
 
-    // Build SET clause only from editable fields
-    const setParts = [];
-    const params = [];
+    // Build update object only from editable fields
+    const updateObj = {};
     for (const field of editable) {
       if (Object.prototype.hasOwnProperty.call(payload, field)) {
-        setParts.push(`${field} = ?`);
-        params.push(payload[field]);
+        updateObj[field] = payload[field];
       }
     }
 
-    if (setParts.length === 0) {
+    if (Object.keys(updateObj).length === 0) {
       return res.status(400).json({ error: "No editable fields provided" });
     }
 
-    const sql = `UPDATE ${TABLE_MAP[tableKey].table} SET ${setParts.join(", ")} WHERE id = ?`;
-    params.push(id);
+    const table = TABLE_MAP[tableKey].table;
+    const { data: updatedRows, error } = await supabase
+      .from(table)
+      .update(updateObj)
+      .eq("id", id)
+      .select("*, users(name, phone)")
+      .maybeSingle();
 
-    const result = await runAsync(sql, params);
-    if (result.changes && result.changes > 0) {
-      // return updated row
-      const selectSql = `
-        SELECT e.*, u.name, u.phone as user_phone
-        FROM ${TABLE_MAP[tableKey].table} e
-        LEFT JOIN users u ON e.user_id = u.id
-        WHERE e.id = ?
-      `;
-      const rows = await allAsync(selectSql, [id]);
-      return res.json({ updated: rows[0] || null });
-    } else {
+    if (error) {
+      console.error("PUT /api/enquiries supabase error:", error);
+      return res.status(500).json({ error: "update failed" });
+    }
+
+    if (!updatedRows) {
       return res.status(404).json({ error: "Enquiry not found or nothing changed" });
     }
+
+    const updated = mapRowToOutput(tableKey, updatedRows);
+    return res.json({ updated });
   } catch (err) {
     console.error("PUT /api/enquiries/:table/:id error:", err);
     return res.status(500).json({ error: "update failed" });
@@ -281,19 +266,25 @@ router.put("/:table/:id", verifyFirebaseToken, async (req, res) => {
 /**
  * DELETE /api/enquiries/:table/:id
  */
-router.delete("/:table/:id", verifyFirebaseToken, async (req, res) => {
+router.delete("/:table/:id", async (req, res) => {
   try {
     const tableKey = (req.params.table || "").trim();
     const id = req.params.id;
     if (!TABLE_MAP[tableKey]) return res.status(400).json({ error: "Invalid table" });
 
-    const sql = `DELETE FROM ${TABLE_MAP[tableKey].table} WHERE id = ?`;
-    const result = await runAsync(sql, [id]);
-    if (result.changes && result.changes > 0) {
-      return res.json({ deleted: true });
-    } else {
+    const table = TABLE_MAP[tableKey].table;
+    const { data, error } = await supabase.from(table).delete().eq("id", id).select("id");
+
+    if (error) {
+      console.error("DELETE /api/enquiries supabase error:", error);
+      return res.status(500).json({ error: "delete failed" });
+    }
+
+    if (!data || data.length === 0) {
       return res.status(404).json({ error: "Not found" });
     }
+
+    return res.json({ deleted: true });
   } catch (err) {
     console.error("DELETE /api/enquiries/:table/:id error:", err);
     return res.status(500).json({ error: "delete failed" });

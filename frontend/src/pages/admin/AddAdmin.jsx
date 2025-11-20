@@ -1,7 +1,9 @@
+// src/pages/admin/AddAdmin.jsx
 import React, { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { auth } from "../../firebaseConfig";
-import "../../assets/pages/admin/AddAdmin.css"; // reuse same styles
+import "../../assets/pages/admin/AddAdmin.css";
+import showDeleteConfirm from "../../components/ConfirmDeleteToast"; // ⬅️ IMPORTED SAME CONFIRM BOX
 
 /* ------------------------------
    Auth Token Helpers
@@ -51,11 +53,12 @@ async function getAuthToken({ timeoutMs = 3000, intervalMs = 150 } = {}) {
 }
 
 async function makeHeaders() {
-    const token = await getAuthToken();
-    const headers = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-    return headers;
-  }
+  const token = await getAuthToken();
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+}
+
 /* ------------------------------
    Constants
 ------------------------------ */
@@ -136,14 +139,25 @@ export default function AddAdmin() {
     }
   }
 
-  async function deleteAdmin(id) {
-    if (!window.confirm("Remove this admin?")) return;
+  /* -------------------------------------------------------------------
+     🔄 REPLACE window.confirm() WITH SAME POPUP USED IN ProjectsAdmin
+  ------------------------------------------------------------------- */
+  function deleteAdmin(id, adminName) {
+    showDeleteConfirm({
+      title: `Delete admin "${adminName || ""}"?`,
+      message: "This admin will be permanently removed.",
+      onConfirm: () => performDelete(id),
+    });
+  }
+
+  async function performDelete(id) {
     try {
       const headers = await makeHeaders();
       const res = await fetch(`${BACKEND_BASE}/api/admins/${id}`, {
         method: "DELETE",
         headers,
       });
+
       if (!res.ok) throw new Error("Delete failed");
       toast.success("Admin removed");
       loadAdmins();
@@ -152,6 +166,8 @@ export default function AddAdmin() {
       toast.error("Failed to delete admin");
     }
   }
+
+  /* ------------------------------ UI ------------------------------ */
 
   return (
     <div className="admins-admin-page">
@@ -173,6 +189,7 @@ export default function AddAdmin() {
               required
             />
           </div>
+
           <div>
             <label>Name</label>
             <input
@@ -181,10 +198,12 @@ export default function AddAdmin() {
               placeholder="Full name"
             />
           </div>
+
           <div className="inline-row">
             <button className="btn primary" type="submit" disabled={adding}>
               {adding ? "Adding…" : "Add Admin"}
             </button>
+
             <button
               type="button"
               className="btn ghost"
@@ -214,17 +233,22 @@ export default function AddAdmin() {
                 <th>Actions</th>
               </tr>
             </thead>
+
             <tbody>
               {admins.map((a) => (
                 <tr key={a.id}>
                   <td>{a.name || "—"}</td>
                   <td>{a.phone || "—"}</td>
-                  <td>{a.created_at ? new Date(a.created_at).toLocaleString() : "—"}</td>
+                  <td>
+                    {a.created_at
+                      ? new Date(a.created_at).toLocaleString()
+                      : "—"}
+                  </td>
                   <td>
                     <div className="admin-actions">
                       <button
                         className="btn small danger"
-                        onClick={() => deleteAdmin(a.id)}
+                        onClick={() => deleteAdmin(a.id, a.name)}
                       >
                         Delete
                       </button>

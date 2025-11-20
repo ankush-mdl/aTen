@@ -2,90 +2,46 @@
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
 const axios = require("axios");
 const AdmZip = require("adm-zip");
 const xlsx = require("xlsx");
-const db = require("../db");
+const crypto = require("crypto");
+const supabase = require("../supabase");
 const verifyFirebaseToken = require("../middleware/verifyFirebaseToken");
-const UPLOADS_DIR = path.join(__dirname, "..", "uploads");
-const TMP_DIR = path.join(__dirname, "..", "tmp");
 
-// ensure both directories exist
-for (const dir of [UPLOADS_DIR, TMP_DIR]) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+const BUCKET = "uploads"; // change if your bucket name differs
+const IMAGE_EXTS = new Set([
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".webp",
+  ".gif",
+  ".bmp",
+  ".svg",
+]);
+
+// multer memory storage (we operate on buffers)
+const upload = multer({ storage: multer.memoryStorage() });
+
+/** Helper: generate short unique filename keeping extension */
+function makeFilename(ext = "") {
+  const basename = crypto.randomBytes(8).toString("hex");
+  return `${basename}${ext}`;
 }
 
-// Multer for receiving files (excel + optional images zip)
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, TMP_DIR),
-  filename: (req, file, cb) => {
-    const name = `${Date.now()}-${file.originalname}`.replace(/\s+/g, "_");
-    cb(null, name);
-  },
-});
-const upload = multer({ storage });
-
-/** Helper: run a sqlite3 query that returns a Promise */
-function dbGetAsync(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
-      if (err) return reject(err);
-      resolve(row);
-    });
+/** Helper: upload buffer to Supabase storage and return path + publicUrl */
+async function uploadBufferToStorage(buffer, destPath) {
+  const { error } = await supabase.storage.from(BUCKET).upload(destPath, buffer, {
+    cacheControl: "3600",
+    upsert: false,
+    contentType: undefined, // let Supabase infer
   });
-}
-function dbRunAsync(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-      if (err) return reject(err);
-      resolve(this);
-    });
-  });
+  if (error) throw error;
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(destPath);
+  return { path: destPath, publicUrl: data?.publicUrl || null };
 }
 
-/**
- * Ensure a column exists on a table; if missing, ALTER TABLE ADD COLUMN.
- * (safe to call repeatedly)
- */
-async function ensureColumnExists(table, column, type = "TEXT") {
-  try {
-    const info = await dbGetAsync(`PRAGMA table_info(${table})`);
-    // PRAGMA table_info returns only first row; instead we query all rows:
-    const rows = await new Promise((res, rej) => {
-      db.all(`PRAGMA table_info(${table})`, (err, r) => {
-        if (err) return rej(err);
-        res(r || []);
-      });
-    });
-    const found = rows.find((c) => c && String(c.name).toLowerCase() === String(column).toLowerCase());
-    if (!found) {
-      // Add column
-      await dbRunAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
-      console.log(`✔ Added column ${column} to ${table}`);
-    } else {
-      // console.log(`Column ${column} already exists on ${table}`);
-    }
-  } catch (err) {
-    // Non-fatal — log and continue
-    console.warn("ensureColumnExists error", err.message || err);
-  }
-}
-
-/**
- * Helper: save buffer to uploads and return relative path (e.g. /uploads/xxx.jpg)
- */
-function saveBufferToUploads(filename, buffer) {
-  const safe = `${Date.now()}-${filename}`.replace(/[^a-zA-Z0-9-_.]/g, "_");
-  const full = path.join(UPLOADS_DIR, safe);
-  fs.writeFileSync(full, buffer);
-  return `/uploads/${safe}`;
-}
-
-/**
- * Helper: download remote URL and save to uploads
- */
+/** Helper: fetch remote url and upload to storage; returns saved path or null */
 async function fetchAndSaveUrl(url) {
   try {
     const res = await axios.get(url, { responseType: "arraybuffer", timeout: 20000 });
@@ -95,13 +51,18 @@ async function fetchAndSaveUrl(url) {
     else if (ct.includes("jpeg") || ct.includes("jpg")) ext = ".jpg";
     else if (ct.includes("gif")) ext = ".gif";
     else {
-      const parsed = path.parse(url);
-      if (parsed.ext) ext = parsed.ext;
+      // try to infer ext from URL
+      const parsed = new URL(url, "http://example.com");
+      const pext = parsed.pathname.split(".").pop();
+      if (pext && pext.length <= 5) ext = `.${pext}`;
     }
-    const filename = `img${Date.now()}${ext}`;
-    return saveBufferToUploads(filename, res.data);
+    const filename = makeFilename(ext);
+    const destPath = `projects/${filename}`;
+    const uploaded = await uploadBufferToStorage(Buffer.from(res.data), destPath);
+    // return storage path (prefixed) for gallery consistency
+    return uploaded.publicUrl ? uploaded.publicUrl : `/storage/${BUCKET}/${destPath}`;
   } catch (err) {
-    console.error("fetchAndSaveUrl error", url, err.message || err);
+    console.warn("fetchAndSaveUrl error", url, err && err.message);
     return null;
   }
 }
@@ -118,68 +79,66 @@ router.post(
   upload.fields([{ name: "file", maxCount: 1 }, { name: "images_zip", maxCount: 1 }]),
   async (req, res) => {
     try {
-      // ensure DB has videos column (safe migration)
-      await ensureColumnExists("projects", "videos", "TEXT");
-
       if (!req.files || !req.files.file || req.files.file.length === 0) {
         return res.status(400).json({ error: "Excel file (.xlsx) is required (field name: file)" });
       }
 
-      const excelPath = req.files.file[0].path;
-      const zipMap = {}; // filename -> saved path ("/uploads/xxx")
-
-      // If a ZIP of images provided, extract and save them
-      if (req.files.images_zip && req.files.images_zip.length) {
-        const zipPath = req.files.images_zip[0].path;
-        try {
-          const zip = new AdmZip(zipPath);
-          const zipEntries = zip.getEntries();
-          zipEntries.forEach((entry) => {
-            if (entry.isDirectory) return;
-            const name = path.basename(entry.entryName);
-            const data = entry.getData();
-            try {
-              const saved = saveBufferToUploads(name, data);
-              zipMap[name] = saved;
-            } catch (err) {
-              console.warn("Failed to save zip entry", name, err && err.message);
-            }
-          });
-        } catch (err) {
-          console.warn("Zip extraction failed:", err && err.message);
-        } finally {
-          // cleanup uploaded zip
-          try {
-            fs.unlinkSync(req.files.images_zip[0].path);
-          } catch (e) {}
-        }
-      }
-
-      // Read workbook
-      const workbook = xlsx.readFile(excelPath, { cellDates: true });
+      // Read excel from buffer
+      const excelBuffer = req.files.file[0].buffer;
+      const workbook = xlsx.read(excelBuffer, { type: "buffer", cellDates: true });
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
       const rows = xlsx.utils.sheet_to_json(sheet, { defval: "" });
 
+      // If ZIP provided, extract entries and upload each image to Supabase storage, keep map name -> publicUrl
+      const zipMap = {}; // originalName -> publicUrl
+      if (req.files && req.files.images_zip && req.files.images_zip.length) {
+        try {
+          const zipBuf = req.files.images_zip[0].buffer;
+          const zip = new AdmZip(zipBuf);
+          const entries = zip.getEntries();
+          for (const entry of entries) {
+            if (entry.isDirectory) continue;
+            const entryName = entry.entryName;
+            const ext = entryName.includes(".") ? entryName.slice(entryName.lastIndexOf(".")).toLowerCase() : "";
+            if (!IMAGE_EXTS.has(ext)) continue;
+            const outName = makeFilename(ext);
+            const destPath = `projects/${outName}`;
+            try {
+              const uploaded = await uploadBufferToStorage(entry.getData(), destPath);
+              zipMap[path.basename(entryName)] = uploaded.publicUrl || uploaded.path;
+            } catch (e) {
+              console.warn("Failed to upload zip entry:", entryName, e && e.message);
+            }
+          }
+        } catch (e) {
+          console.warn("ZIP processing failed:", e && e.message);
+        }
+      }
+
       const inserted = [];
       const errors = [];
 
+      // utility fn: split csv/newline into array
+      const splitToArray = (v) => {
+        if (!v) return [];
+        if (Array.isArray(v)) return v;
+        if (typeof v === "string") return v.split(/[,|\n]+/).map((s) => s.trim()).filter(Boolean);
+        return [];
+      };
+
       // iterate rows
       for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
-        const row = rows[rowIndex];
-
-        // normalize keys to lowercase
+        const rawRow = rows[rowIndex];
         const r = {};
-        Object.keys(row).forEach((k) => {
-          r[k.toString().trim().toLowerCase()] = row[k];
+        Object.keys(rawRow).forEach((k) => {
+          r[k.toString().trim().toLowerCase()] = rawRow[k];
         });
 
         const title = String(r.title || r.name || "").trim();
         const city = String(r.city || "").trim();
-
         if (!title || !city) {
           errors.push({ row: rowIndex + 1, error: "Missing required title or city", data: r });
-          console.warn("Skipping row missing title/city", r);
           continue;
         }
 
@@ -191,19 +150,20 @@ router.post(
           for (const p of parts) {
             try {
               if (/^https?:\/\//i.test(p)) {
-                const saved = await fetchAndSaveUrl(p);
-                if (saved) galleryArr.push(saved);
+                const savedUrl = await fetchAndSaveUrl(p);
+                if (savedUrl) galleryArr.push(savedUrl);
               } else if (zipMap[p]) {
                 galleryArr.push(zipMap[p]);
-              } else if (p.startsWith("/uploads/") || p.startsWith("uploads/")) {
-                const normalized = p.startsWith("/") ? p : `/${p}`;
-                galleryArr.push(normalized);
-              } else if (p.match(/\.[a-z]{2,4}$/i) && !p.includes(" ")) {
+              } else if (p.startsWith("/uploads/") || p.startsWith("uploads/") || p.startsWith("/storage/")) {
+                // if someone provided server path or public url, keep as-is (prefer public url)
+                galleryArr.push(p);
+              } else if (p.match(/\.[a-z]{2,5}$/i) && !p.includes(" ")) {
+                // try as URL
                 const tryUrl = p.startsWith("//") ? `https:${p}` : `http://${p}`;
                 const saved = await fetchAndSaveUrl(tryUrl);
                 if (saved) galleryArr.push(saved);
               } else {
-                // unknown token — ignore
+                // ignore unknown token
               }
             } catch (err) {
               console.warn("Gallery item processing failed", p, err && err.message);
@@ -211,20 +171,11 @@ router.post(
           }
         }
 
-        // helper: split csv/newline into array
-        const splitToArray = (v) => {
-          if (!v) return [];
-          if (Array.isArray(v)) return v;
-          if (typeof v === "string") return v.split(/[,|\n]+/).map((s) => s.trim()).filter(Boolean);
-          return [];
-        };
-
-        // videos: accept comma/newline separated IDs or URLs
+        // videos: accept comma/newline separated
         const videosArrRaw = splitToArray(r.videos || r.video || "");
-        // normalize videos: keep original tokens (frontend/component will interpret)
         const videosArr = videosArrRaw.map((t) => String(t).trim()).filter(Boolean);
 
-        // configurations: accept JSON or leave as []
+        // configurations
         let configurationsParsed = [];
         if (r.configurations) {
           if (typeof r.configurations === "string") {
@@ -240,12 +191,16 @@ router.post(
           }
         }
 
-        const project = {
+        // helper to split highlights/amenities
+        const highlights = splitToArray(r.highlights || "");
+        const amenities = splitToArray(r.amenities || "");
+
+        const projectObj = {
+          slug: r.slug || null,
           title,
-          slug: r.slug || "",
-          location_area: r.location_area || "",
+          location_area: r.location_area || null,
           city,
-          address: r.address || "",
+          address: r.address || null,
           rera: r.rera || null,
           status: r.status || null,
           property_type: r.property_type || null,
@@ -255,93 +210,57 @@ router.post(
           floors: r.floors || null,
           land_area: r.land_area || null,
           description: r.description || null,
-          videos: videosArr,
+          videos: videosArr || [],
           developer_name: r.developer_name || null,
           developer_logo: r.developer_logo || null,
           developer_description: r.developer_description || null,
-          highlights: splitToArray(r.highlights || ""),
-          amenities: splitToArray(r.amenities || ""),
+          highlights,
+          amenities,
           gallery: galleryArr,
-          thumbnail: (galleryArr.length ? galleryArr[0] : null),
+          thumbnail: galleryArr.length ? galleryArr[0] : null,
           brochure_url: r.brochure_url || null,
           contact_phone: r.contact_phone || null,
           contact_email: r.contact_email || null,
           price_info: r.price_info || null,
         };
 
-        // slugify
+        // slugify function
         const slugify = (s) =>
           String(s || "")
             .toLowerCase()
             .replace(/\s+/g, "-")
             .replace(/[^a-z0-9-_]/g, "");
-        const slugVal = project.slug ? slugify(project.slug) : slugify(project.title);
 
-        const sql = `INSERT INTO projects
-          (slug, title, location_area, city, address, rera, status, property_type,
-           configurations, blocks, units, floors, land_area, description, videos, developer_name, developer_logo, developer_description, highlights, amenities, gallery, thumbnail,
-           brochure_url, contact_phone, contact_email, price_info, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`;
+        const slugVal = projectObj.slug ? slugify(projectObj.slug) : slugify(projectObj.title);
+        projectObj.slug = slugVal;
 
-        const params = [
-          slugVal,
-          project.title,
-          project.location_area,
-          project.city,
-          project.address,
-          project.rera,
-          project.status,
-          project.property_type,
-          JSON.stringify(project.configurations || []),
-          project.blocks,
-          project.units,
-          project.floors,
-          project.land_area,
-          project.description,
-          JSON.stringify(project.videos || []), // videos JSON
-          project.developer_name,
-          project.developer_logo,
-          project.developer_description,
-          JSON.stringify(project.highlights || []),
-          JSON.stringify(project.amenities || []),
-          JSON.stringify(project.gallery || []),
-          project.thumbnail,
-          project.brochure_url,
-          project.contact_phone,
-          project.contact_email,
-          JSON.stringify(project.price_info || null),
-        ];
-
+        // Insert into Supabase
         try {
-          // insert
-          const runResult = await new Promise((resolve) => {
-            db.run(sql, params, function (err) {
-              if (err) {
-                return resolve({ ok: false, error: err.message });
-              }
-              db.get("SELECT * FROM projects WHERE id = ?", [this.lastID], (e, row) => {
-                if (e) return resolve({ ok: false, error: e.message });
-                resolve({ ok: true, id: row.id, slug: row.slug, title: row.title });
-              });
-            });
-          });
+          // Insert; if slug collision happens, return error (you can also use upsert)
+          const { data: inserted, error: insertErr } = await supabase
+            .from("projects")
+            .insert([projectObj])
+            .select("id, slug, title")
+            .maybeSingle();
 
-          if (runResult && runResult.ok) {
-            inserted.push(runResult);
-          } else {
-            errors.push({ row: rowIndex + 1, error: runResult.error || "Insert failed", title: project.title });
-            console.error("Insert error row", runResult.error || "unknown", project.title);
+          if (insertErr) {
+            // handle unique key error on slug gracefully
+            console.error("Supabase insert error row", rowIndex + 1, insertErr);
+            errors.push({ row: rowIndex + 1, error: insertErr.message || insertErr, title });
+            continue;
           }
+
+          if (inserted) {
+            inserted.push && inserted.push; // no-op to avoid linter confusion
+          }
+
+          // push summary
+          inserted.push({ id: inserted?.id ?? null, slug: inserted?.slug ?? slugVal, title: inserted?.title ?? title });
         } catch (err) {
-          errors.push({ row: rowIndex + 1, error: err.message || String(err), title: project.title });
-          console.error("Unexpected insert error", err);
+          console.error("Insert exception", err);
+          errors.push({ row: rowIndex + 1, error: err.message || String(err), title });
         }
       } // end rows loop
-
-      // cleanup excel tmp file
-      try {
-        fs.unlinkSync(excelPath);
-      } catch (e) {}
 
       return res.json({ imported: inserted.length, items: inserted, errors });
     } catch (err) {

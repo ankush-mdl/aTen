@@ -46,45 +46,47 @@ export const AuthProvider = ({ children }) => {
   }, [token]);
 
   // Called after Firebase phone auth is successful: send ID token to backend to create/return user
-// inside AuthContext.jsx - replace loginWithFirebaseIdToken with this version
-async function loginWithFirebaseIdToken(idToken) {
-  setLoading(true);
-  try {
-    // Save token first so apiFetch will include it in Authorization header
-    localStorage.setItem("auth_token", idToken);
+  // Accepts optional name param which will be passed to backend in POST body
+  async function loginWithFirebaseIdToken(idToken, name = null) {
+    setLoading(true);
+    try {
+      // Save token first so apiFetch will include it in Authorization header
+      localStorage.setItem("auth_token", idToken);
 
-    const res = await apiFetch("/auth", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}) // backend reads token, so body can be empty
-    });
+      // include name in body if provided
+      const body = name ? { name } : {};
 
-    if (!res.ok) {
+      const res = await apiFetch("/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+
+      if (!res.ok) {
+        localStorage.removeItem("auth_token");
+        throw new Error(res.data?.error || "Auth failed");
+      }
+
+      // backend returns res.data.user with shape { id, uid, phone, name, isAdmin }
+      const userFromServer = res.data.user;
+      if (!userFromServer || typeof userFromServer.id === "undefined") {
+        // defensive: if backend shape is unexpected, clear token and fail
+        localStorage.removeItem("auth_token");
+        throw new Error("Invalid auth response from server");
+      }
+
+      setUser(userFromServer);
+      setToken(idToken);
+      return userFromServer;
+    } catch (err) {
       localStorage.removeItem("auth_token");
-      throw new Error(res.data?.error || "Auth failed");
+      setUser(null);
+      setToken(null);
+      throw err;
+    } finally {
+      setLoading(false);
     }
-
-    // backend returns res.data.user with shape { id, uid, phone, name, isAdmin }
-    const user = res.data.user;
-    if (!user || typeof user.id === "undefined") {
-      // defensive: if backend shape is unexpected, clear token and fail
-      localStorage.removeItem("auth_token");
-      throw new Error("Invalid auth response from server");
-    }
-
-    setUser(user);
-    setToken(idToken);
-    return user;
-  } catch (err) {
-    localStorage.removeItem("auth_token");
-    setUser(null);
-    setToken(null);
-    throw err;
-  } finally {
-    setLoading(false);
   }
-}
-
 
   function logout() {
     setUser(null);

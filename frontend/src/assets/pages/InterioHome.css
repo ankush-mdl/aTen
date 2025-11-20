@@ -1,210 +1,294 @@
-/* Fullscreen split layout */
-.interio-page {
-  display: flex;
-  height: 100vh;
-  width: 100%;
-  overflow: hidden;
-  background: linear-gradient(180deg, var(--bg), #ffffff 40%);
-  font-family: 'Inter', 'Montserrat', system-ui, -apple-system, 'Segoe UI', Roboto, Arial;
+/* InterioHome.css
+   Card-style Interio page + testimonials + projects track
+   Replace or paste at src/assets/pages/InterioHome.css
+*/
+
+/* Theme variables */
+:root{
+  --max-width: 1200px;
+
 }
 
-/* Each half section */
-.interio-section {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  color: white;
-  cursor: pointer;
-  overflow: hidden;
-  transition: transform 260ms ease;
-  min-width: 300px;
+/* Page wrapper */
+.interio-page.cards-layout {
+  font-family: var(--font-sans);
+  color: var(--primary);
+  background: linear-gradient(180deg, #fff, #faf7f2);
+  padding: 28px;
+  box-sizing: border-box;
 }
 
-/* Background image moved to ::before — keeps zoom effect */
-.interio-section::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-position: center;
-  background-size: cover;
-  background-repeat: no-repeat;
-  transition: transform 0.6s ease-in-out;
-  z-index: 0;
-}
-
-.home-section::before {
-  background-image: url("/home.jpg");
-}
-
-.commercial-section::before {
-  background-image: url("/commercial.jpg");
-}
-
-/* Dark tint overlay — now lighter by default */
-.interio-section::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--overlay-dark);
-  transition: background 0.45s ease;
-  z-index: 1;
-}
-
-/* Hover effects — slightly darker overlay + zoom */
-.interio-section:hover::before {
-  transform: scale(1.05);
-}
-.interio-section:hover::after {
-  background: rgba(0, 0, 0, 0.45);
-}
-
-/* Foreground content */
-.section-content {
-  position: relative;
-  z-index: 2;
-  text-align: center;
-  transition: transform 0.4s ease, opacity 0.35s ease;
-  padding: 20px;
-  max-width: 520px;
-}
-
-/* Title — fades out on hover now */
-.section-content h2 {
-  font-size: clamp(2rem, 4vw, 3rem);
-  font-weight: 700;
-  margin-bottom: 10rem;
-  color: #fff;
-  letter-spacing: 0.4px;
-  text-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-  opacity: 1;
-  transition: opacity 0.5s ease, transform 0.5s ease;
-}
-
-/* Fade and move title on hover */
-.interio-section:hover .section-content h2 {
-  transform: translateY(-14px);
-  opacity: 0; /* fades out */
-}
-
-/* Hover menu overlay */
-.hover-menu {
-  position: absolute;
-  top: 55%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+/* Top cards row */
+.cards-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 1rem;
-  row-gap: 0.9rem;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.36s ease, transform 0.36s ease;
-  z-index: 2;
-  width: min(780px, 88%);
-  justify-items: center;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  max-width: var(--max-width);
+  margin: 0 auto 20px;
 }
 
-/* Reveal menu on hover */
-.interio-section:hover .hover-menu {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translate(-50%, -50%) translateY(-6px);
+/* Card panel */
+.card-panel {
+  background: white;
+  border-radius: var(--radius);
+  box-shadow: var(--panel-shadow);
+  overflow: hidden;
+  display: flex;
+  gap: 0;
+  min-height: 300px;
+  align-items: stretch;
+  background-size: cover;
+   position: relative;            /* ensure pseudo-element is positioned relative to card */
+  background-repeat: no-repeat;
+  background-size: cover;
+  box-shadow: 0 8px 30px rgba(168,132,65,0.15);
+  background-position: center;
 }
 
-/* ===== BUTTON STYLE UPDATE (Golden Theme) ===== */
-.hover-menu button {
-  color: #a88441;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(250, 250, 250, 0.95));
-  font-size: 1.02rem;
-  font-weight: 700;
-  border: 1px solid rgba(15, 25, 30, 0.08);
-  padding: 10px 16px;
-  min-width: 140px;
-  width: 100%;
-  transition: all 180ms ease;
-  border-radius: 14px; /* subtly round */
-  cursor: pointer;
-  box-shadow: 0 8px 22px rgba(16, 24, 32, 0.06);
-  display: inline-flex;
-  align-items: center;
+/* media area (left) - uses background images via classes */
+/* .card-panel {
+  width: 48%;
+  min-width: 220px;
+  background-size: cover;
+  background-position: center;
+  filter: contrast(1.02) saturate(1.03);
+} */
+
+/* specific backgrounds - adjust paths as needed */
+.home-panel  { background-image: url("/home.jpg"); }
+.commercial-panel { background-image: url("/commercial.jpg"); }
+
+/* body (right) */
+.card-body {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
   justify-content: center;
+  gap: 12px;
+  color:#fff ;
+  width: 100%;
 }
 
-.hover-menu button:hover {
+.card-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff !important;
+}
+
+.card-sub {
+  margin: 0;
+  color: #fff;
+}
+
+/* pill buttons */
+.card-actions {
+  display: flex;
+  width: 80%;
+  flex-wrap: wrap;
+  background: transparent !important;
+  justify-content: flex-start !important;
+  margin-top: 6px;
+}
+
+.pill {
+  display: inline-block;
+  margin-top: 6px;
+  background: rgba(255,255,255,0.2);
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none !important;
+  color: white;
+  font-weight: 700;
+  font-size: 0.9rem;
+
+}
+
+.pill:hover {
   background: linear-gradient(90deg,#a88441,#c29f5b);
   color: #fff;
   transform: translateY(-3px);
-  box-shadow: 0 12px 26px rgba(168, 132, 65, 0.3);
+
 }
 
-/* Smooth focus state */
-.hover-menu button:focus {
-  outline: 2px solid rgba(168, 132, 65, 0.5);
-  outline-offset: 3px;
-  border-radius: 14px;
+/* panel used for lists */
+.panel {
+  max-width: var(--max-width);
+  margin: 18px auto;
+  background: white !important;
+  border-radius: var(--radius);
+  box-shadow: 0 8px 30px rgba(168,132,65,0.15);
+  border: 1px solid #fadfb1 !important;
+  padding: 18px;
+  color: #654a26
 }
 
-/* Mobile adjustments */
-@media (max-width: 768px) {
-  .interio-page {
-    flex-direction: column;
-    height: auto;
-    min-height: 100vh;
-  }
-
-  .interio-section {
-    height: 50vh;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .section-content h2 {
-    font-size: 2rem;
-    margin-bottom: 1.2rem;
-    opacity: 1; /* keep visible on mobile */
-  }
-
-  /* Hover menu always visible on mobile */
-  .hover-menu {
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    position: static;
-    transform: none;
-    margin-top: 1rem;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 0.8rem;
-    width: 100%;
-    padding: 0 18px;
-    justify-items: center;
-  }
-
-  .hover-menu button {
-    font-size: 1rem;
-    padding: 10px 12px;
-    min-width: 120px;
-    width: 100%;
-    border-radius: 12px;
-  }
-
-  /* Disable title fade on hover for mobile */
-  .interio-section:hover .section-content h2 {
-    transform: none;
-    opacity: 1;
-  }
-  .interio-section:hover .hover-menu {
-  opacity: 1;
-  pointer-events: auto;
-  transform: none;
+/* section header */
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  margin-left: 10px;
 }
-  .interio-section::after {
-    transform: none;
-    transition: none ;
-  }
-  .hover-menu{
-    transition: none;
-    transform: ;
-  }
+
+.section-head h4 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.controls { display: flex; gap: 8px; }
+
+/* small control buttons */
+.ctrl {
+  background: white;
+  border: 1px solid rgba(16,24,32,0.06);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+/* track wrapper */
+.track-wrap {
+  overflow: hidden;
+}
+
+.track {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 8px 2px;
+  scroll-behavior: smooth;
+}
+
+.track::-webkit-scrollbar { height: 8px; }
+.track::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.08); border-radius: 8px; }
+
+/* testimonial card */
+.testimonial-card {
+  min-width: 260px;
+  width: 260px;
+  background: linear-gradient(180deg,#fff,#fff);
+  border-radius: 10px;
+  padding: 14px;
+  border: 1px solid #fadfb1 !important;
+  box-shadow: var(--card-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.testimonial-img img {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid #eee;
+}
+
+/* project card */
+.project-card {
+  min-width: 300px;
+  width: 300px;
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--card-shadow);
+  display: flex;
+  flex-direction: column;
+}
+
+.project-thumb {
+  height: 160px;
+  background-size: cover;
+  background-position: center;
+}
+
+.project-info {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.project-info h5 { margin: 0; font-size: 16px; font-weight: 800; }
+.meta { color: var(--muted); font-size: 13px; }
+.theme { color: #6b4f2f; font-weight: 700; font-size: 13px; }
+
+/* actions on project */
+.project-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.btn {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(16,24,32,0.06);
+  background: #fff;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.btn.small { padding: 6px 8px; font-size: 13px; }
+
+/* empty / loading */
+.panel-empty {
+  padding: 26px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.panel-empty.error { color: crimson; }
+
+/* responsive */
+@media (max-width: 980px) {
+  .cards-row { grid-template-columns: 1fr; }
+  .card-panel { flex-direction: column; min-height: 260px; }
+  .card-panel { width: 100%; height: 160px; min-width: auto; }
+  .card-body { width: 100%; }
+  .card-actions { width: 100%; grid-template-columns: repeat(3, 1fr); }
+  .track { gap: 10px; }
+  .project-card { width: 86%; min-width: 240px; }
+  .testimonial-card { width: 86%; min-width: 220px; }
+}
+
+/* smaller mobile */
+@media (max-width: 520px) {
+  .pill { padding: 10px; font-size: 14px; }
+  .card-title { font-size: 18px; }
+  .project-thumb { height: 140px; }
+}
+/* Make card background images darker for better text contrast
+   Adds a dark overlay via ::before so images stay intact. */
+
+
+/* overlay sits above the image but under the card content */
+.card-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    rgba(0, 0, 0, 0.6),
+    rgba(0,0,0,0.6)
+  ); /* adjust alpha (0.0 -> 0.7) to taste */
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* ensure the card text sits above the overlay */
+.card-body {
+  position: relative;
+  z-index: 2;
+  color: white; /* keep text readable */
+}
+
+/* optionally slightly dim media if you use separate media area */
+.card-panel .card-media,
+.card-panel .card-media * {
+  display: block;
 }

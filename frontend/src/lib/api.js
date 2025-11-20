@@ -37,32 +37,19 @@ function looksAbsoluteUrl(s) {
 /* -------------------------
    Image helper (getImageUrl)
    ------------------------- */
-export function getImageUrl(raw) {
-  if (raw === null || raw === undefined) return null;
-
-  let s = Array.isArray(raw) ? raw[0] : raw;
-  if (s === null || s === undefined) return null;
-  s = String(s).trim();
-  if (!s) return null;
-
-  if (looksAbsoluteUrl(s)) return s;
-
-  const base = BASE || (typeof window !== "undefined" ? window.location.origin : "");
-
-  // If path starts with /uploads, ensure base is prepended
-  if (s.startsWith("/uploads/") || s.startsWith("uploads/")) {
-    return `${base}${s.startsWith("/") ? "" : "/"}${s}`;
-  }
-
-  // Relative path: treat as /uploads/...
-  if (!s.startsWith("/")) {
-    s = `/uploads/${s}`;
-  } else if (!s.startsWith("/uploads/")) {
-    s = `/uploads${s}`;
-  }
-
-  return `${base}${s}`;
+export function getImageUrl(pathOrUrl) {
+  if (!pathOrUrl) return "";
+  const s = String(pathOrUrl).trim();
+  if (/^https?:\/\//i.test(s)) return s; // signed/public URL -> return unchanged
+  // if it's an absolute path returned by server (e.g., '/uploads/xyz.jpg'), prefix backend base
+  const BACKEND_BASE = import.meta.env.VITE_BACKEND_BASE || "";
+  if (s.startsWith("/")) return `${BACKEND_BASE}${s}`;
+  // if it's a raw storage path like 'projects/abc.jpg', you can either:
+  // - ask server to return signedUrl/publicUrl (recommended), or
+  // - construct a public url (not ideal for private buckets)
+  return s;
 }
+
 
 /* -------------------------
    Auth helpers + fetch wrappers

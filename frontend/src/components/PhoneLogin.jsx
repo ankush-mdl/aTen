@@ -1,7 +1,7 @@
 // src/components/PhoneLogin.jsx
 import React, { useState, useEffect } from "react";
 import { auth, createRecaptchaVerifier } from "../firebaseConfig";
-import { signInWithPhoneNumber } from "firebase/auth";
+import { signInWithPhoneNumber, updateProfile } from "firebase/auth";
 import { useNavigate, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
@@ -39,8 +39,13 @@ export default function PhoneLogin() {
 
   async function sendOtp() {
     const rawPhone = String(phone || "").trim();
+    const rawName = String(name || "").trim();
+
+    if (!rawName) return toast.error("Enter your name (required)");
     if (!rawPhone) return toast.error("Enter phone number");
+
     setLoading(true);
+
     try {
       const verifier = setupRecaptcha();
       let formatted = rawPhone;
@@ -69,14 +74,27 @@ export default function PhoneLogin() {
     try {
       const result = await confirmation.confirm(code);
       const firebaseUser = result.user;
-      const idToken = await firebaseUser.getIdToken();
+
+      // If we have a name, update the Firebase user profile so displayName is set
+      const trimmedName = String(name || "").trim();
+      if (trimmedName) {
+        try {
+          // updateProfile may not always succeed (e.g. provider restrictions), but we try
+          await updateProfile(firebaseUser, { displayName: trimmedName });
+        } catch (e) {
+          console.warn("updateProfile failed:", e);
+        }
+      }
+
+      // Force token refresh to ensure any profile changes are reflected
+      const idToken = await firebaseUser.getIdToken(true);
 
       // store idToken and call your backend auth handler
       localStorage.setItem("auth_token", idToken);
 
       // optionally save name to localStorage
-      if (name && String(name).trim()) {
-        try { localStorage.setItem("login_name", String(name).trim()); } catch (e) {}
+      if (trimmedName) {
+        try { localStorage.setItem("login_name", trimmedName); } catch (e) {}
       }
 
       // store customer_phone so SubmitTestimonial picks it up
@@ -86,15 +104,12 @@ export default function PhoneLogin() {
         if (typeof window !== "undefined") window.__CUSTOMER_PHONE__ = normalizedPhone;
       }
 
-      // let app/context know about token
-      await loginWithFirebaseIdToken(idToken);
+      // let app/context know about token AND send name so backend stores it
+      await loginWithFirebaseIdToken(idToken, trimmedName || null);
 
       toast.success("Logged in");
 
       // Decide redirect target:
-      // - If we were navigated here with state.from that points to testimonial(s) page,
-      //   redirect to that path (preserve the intended page).
-      // - Otherwise, redirect to home "/".
       const fromPath = location.state?.from?.pathname || "";
       const cameFromTestimonial =
         typeof fromPath === "string" &&
@@ -130,7 +145,7 @@ export default function PhoneLogin() {
             <input
               id="name"
               className="name-input"
-              placeholder="Your name (optional)"
+              placeholder="Your name"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />

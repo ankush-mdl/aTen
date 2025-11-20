@@ -1,50 +1,107 @@
+// backend/routes/adminRoutes.js
 const express = require("express");
-const db = require("../db"); // your sqlite db wrapper
-const router = express.Router();
+const supabase = require("../supabase"); // must export createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 const verifyFirebaseToken = require("../middleware/verifyFirebaseToken");
 const requireAdmin = require("../middleware/requireAdmin");
 
+const router = express.Router();
+
 router.use(verifyFirebaseToken);
 router.use(requireAdmin);
-// POST /api/auth/admin
-router.post("/admin", (req, res) => {
-  const { name, phone } = req.body;
-  if (!phone) return res.status(400).json({ error: "Phone required" });
 
-  // Check if phone is in admins table
-  const checkSql = `SELECT * FROM admin WHERE phone = ?`;
-  db.get(checkSql, [phone], (err, adminRow) => {
-    if (err) return res.status(500).json({ error: err.message });
+/** Helper - normalize phone (store digits or E.164 if + included) */
+function normalizePhone(phone) {
+  if (!phone) return "";
+  const s = String(phone).trim();
+  const hasPlus = s.startsWith("+");
+  const digits = s.replace(/\D/g, "");
+  return hasPlus ? `+${digits}` : digits;
+}
+
+/**
+ * POST /api/auth/admin
+ * Body: { name, phone }
+ *
+ * Behavior:
+ * - Check admin table for phone
+ * - If not admin -> 403
+ * - If admin: if a users row exists for the phone -> return it with isAdmin: true
+ *   otherwise insert a users row and return that
+ */
+router.post("/admin", async (req, res) => {
+  try {
+    const { name, phone: rawPhone } = req.body || {};
+    if (!rawPhone) return res.status(400).json({ error: "Phone required" });
+
+    const phone = normalizePhone(rawPhone);
+
+    // Check admin table by phone
+    const { data: adminRow, error: adminErr } = await supabase
+      .from("admin")
+      .select("*")
+      .eq("phone", phone)
+      .maybeSingle();
+
+    if (adminErr) {
+      console.error("Supabase admin lookup error:", adminErr);
+      return res.status(500).json({ error: "DB error" });
+    }
 
     if (!adminRow) {
       // Not an admin — reject
       return res.status(403).json({ error: "Not an admin" });
     }
 
-    // Optional: create or update users table for this admin
-    const findUser = `SELECT * FROM users WHERE phone = ?`;
-    db.get(findUser, [phone], (e, userRow) => {
-      if (e) return res.status(500).json({ error: e.message });
+    // Check if users row exists
+    const { data: userRow, error: userErr } = await supabase
+      .from("users")
+      .select("*")
+      .eq("phone", phone)
+      .maybeSingle();
 
-      const respondWithUser = (user) => {
-        // Build user object with isAdmin true
-        const u = { id: user.id, name: user.name || name || adminRow.name, phone: user.phone, isAdmin: true };
-        return res.json({ user: u });
+    if (userErr) {
+      console.error("Supabase users lookup error:", userErr);
+      return res.status(500).json({ error: "DB error" });
+    }
+
+    const respondWithUser = (user) => {
+      const u = {
+        id: user.id,
+        name: user.name || name || adminRow.name,
+        phone: user.phone,
+        isAdmin: true,
       };
+      return res.json({ user: u });
+    };
 
-      if (userRow) {
-        respondWithUser(userRow);
-      } else {
-        const ins = `INSERT INTO users (name, phone, created_at) VALUES (?, ?, datetime('now'))`;
-        db.run(ins, [name || adminRow.name || null, phone], function (err2) {
-          if (err2) return res.status(500).json({ error: err2.message });
-          // lastID is this.lastID
-          const newUser = { id: this.lastID, name: name || adminRow.name, phone };
-          respondWithUser(newUser);
-        });
-      }
-    });
-  });
+    if (userRow) {
+      return respondWithUser(userRow);
+    }
+
+    // Insert a new user
+    const toInsert = {
+      name: name || adminRow.name || null,
+      phone,
+    };
+
+    const { data: insertedRows, error: insertErr } = await supabase
+      .from("users")
+      .insert([toInsert])
+      .select()
+      .maybeSingle();
+
+    if (insertErr) {
+      console.error("Supabase users insert error:", insertErr);
+      return res.status(500).json({ error: "DB error" });
+    }
+
+    // insertedRows may be single row or null if something odd happened
+    const newUser = insertedRows || { id: null, name: toInsert.name, phone };
+    return respondWithUser(newUser);
+  } catch (e) {
+    console.error("POST /api/auth/admin unexpected error:", e);
+    return res.status(500).json({ error: "Server error" });
+  }
 });
 
 module.exports = router;

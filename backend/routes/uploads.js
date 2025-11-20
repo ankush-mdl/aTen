@@ -2,31 +2,66 @@
 const express = require("express");
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
+const crypto = require("crypto");
+const supabase = require("../supabase");
 const verifyFirebaseToken = require("../middleware/verifyFirebaseToken");
+
 const router = express.Router();
 
-const UPLOAD_DIR = path.join(__dirname, "..", "uploads");
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
+// change this to your bucket name if different
+const BUCKET = "uploads";
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const name = `${Date.now()}-${Math.random().toString(36).slice(2,8)}${ext}`;
-    cb(null, name);
-  },
-});
-const upload = multer({ storage });
+// use memory storage so we can upload buffer directly to Supabase
+const upload = multer({ storage: multer.memoryStorage() });
 
-router.post("/", verifyFirebaseToken, upload.single("file"), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file" });
+// small helper to generate a short random filename preserving extension
+function makeFilename(originalName) {
+  const ext = path.extname(originalName).toLowerCase() || ".jpg";
+  const name = crypto.randomBytes(8).toString("hex");
+  return `${Date.now()}-${name}${ext}`;
+}
 
-  const protocol = req.protocol || "http";
-  const host = req.get("host") || "localhost:5000";
-  const url = `${protocol}://${host}/uploads/${req.file.filename}`;
+// upload buffer to Supabase storage and return { path, publicUrl }
+async function uploadBufferToSupabase(buffer, destPath) {
+  const { error } = await supabase.storage.from(BUCKET).upload(destPath, buffer, {
+    cacheControl: "3600",
+    upsert: false,
+  });
+  if (error) throw error;
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(destPath);
+  return { path: destPath, publicUrl: data?.publicUrl || null };
+}
 
-  return res.json({ url });
+/**
+ * POST /api/uploads
+ * Accepts single file field "file".
+ * Returns: { path: "<bucket/path>", publicUrl: "https://..." }
+ */
+router.post("/", verifyFirebaseToken, upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No file uploaded (field name: file)" });
+
+    const filename = makeFilename(req.file.originalname);
+    // optional: store files under a folder, e.g., `users/<uid>/...` or `projects/...`
+    const prefix = req.firebaseUser?.uid ? `users/${req.firebaseUser.uid}` : "uploads";
+    const destPath = `${prefix}/${filename}`;
+
+    // upload buffer
+    try {
+      const uploaded = await uploadBufferToSupabase(req.file.buffer, destPath);
+      return res.json({
+        path: uploaded.path,
+        publicUrl: uploaded.publicUrl,
+        message: "Uploaded to Supabase storage",
+      });
+    } catch (uploadErr) {
+      console.error("Supabase upload error:", uploadErr);
+      return res.status(500).json({ error: "Failed to upload to storage", details: uploadErr.message || uploadErr });
+    }
+  } catch (err) {
+    console.error("Upload route error:", err);
+    return res.status(500).json({ error: "Server error during upload" });
+  }
 });
 
 module.exports = router;

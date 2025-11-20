@@ -428,37 +428,52 @@ export default function ProjectForm() {
 
   // ---- fetch existing uploads list (uses auth) ----
   async function fetchUploadsList() {
-    setUploadsLoading(true);
-    setUploadsList([]);
-    setSelectedUploads(new Set());
-    try {
-      const headers = await makeHeaders();
-      const res = await fetch(`${BACKEND_BASE}/api/uploads`, { headers });
-      if (!res.ok) {
-        console.warn("Primary /api/uploads failed:", res.status);
-        const alt = await fetch(`${BACKEND_BASE}/uploads`);
-        if (!alt.ok) throw new Error(`Uploads listing failed`);
-        const altBody = await alt.json().catch(() => null);
-        if (Array.isArray(altBody)) setUploadsList(altBody);
-        else if (altBody && Array.isArray(altBody.files)) setUploadsList(altBody.files);
-      } else {
-        const body = await res.json().catch(() => null);
-        let arr = [];
-        if (Array.isArray(body)) arr = body;
-        else if (body && Array.isArray(body.files)) arr = body.files;
-        else if (body && Array.isArray(body.items)) arr = body.items;
-        else if (body && typeof body === "object") {
-          arr = Object.values(body).filter((v) => typeof v === "string");
-        }
-        setUploadsList(arr);
-      }
-    } catch (err) {
-      console.error("Failed to fetch uploads list:", err);
-      toast.error("Failed to load uploads list. Check backend endpoint /api/uploads");
-    } finally {
-      setUploadsLoading(false);
+  setUploadsLoading(true);
+  setUploadsList([]);
+  setSelectedUploads(new Set());
+  try {
+    const headers = await makeHeaders();
+    const res = await fetch(`${BACKEND_BASE}/api/uploads`, { headers });
+
+    if (!res.ok) {
+      throw new Error(`Uploads listing failed: ${res.status}`);
     }
+
+    const body = await res.json().catch(() => null);
+    let arr = [];
+
+    if (Array.isArray(body)) {
+      // body is expected to be array of { path, name, signedUrl, ... }
+      arr = body
+        .map((item) => {
+          if (!item) return null;
+          // prefer signedUrl (private bucket)
+          if (item.signedUrl && typeof item.signedUrl === "string") return item.signedUrl;
+          if (item.publicUrl && typeof item.publicUrl === "string") return item.publicUrl;
+          // fallback: if backend returned a plain URL string
+          if (typeof item === "string" && item.startsWith("http")) return item;
+          // fallback: use path (may be /uploads/xxx or storage path) — let getImageUrl handle it
+          if (item.path) return item.path;
+          if (item.url) return item.url;
+          if (item.filename) return `/uploads/${item.filename}`;
+          return null;
+        })
+        .filter(Boolean);
+    } else {
+      throw new Error("Unexpected uploads response shape");
+    }
+
+    // DEBUG: log exact list returned
+    console.debug("uploadsList resolved to:", arr);
+    setUploadsList(arr);
+  } catch (err) {
+    console.error("Failed to fetch uploads list:", err);
+    toast.error("Failed to load uploads list. Check backend endpoint /api/uploads");
+  } finally {
+    setUploadsLoading(false);
   }
+}
+
 
   const toggleUploadSelect = (url) => {
     setSelectedUploads((prev) => {
