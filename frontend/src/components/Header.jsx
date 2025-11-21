@@ -71,7 +71,7 @@ export default function Navbar() {
         </button>
 
         <div className={`nav-links ${menuOpen ? "open" : ""}`} aria-hidden={!menuOpen && window.innerWidth <= 768}>
-           {isAdmin &&<Link to="/admin" onClick={() => closeMenu()}>
+          <div className="contents-nav"> {isAdmin &&<Link to="/admin" onClick={() => closeMenu()}>
             <span className="whatsapp-no">Admin</span>
           </Link>}
           <Link to="/" onClick={() => closeMenu()}>
@@ -91,7 +91,7 @@ export default function Navbar() {
                 <button onClick={handleLogout} className="logout-btn">Logout</button>
               </div>
             )}
-          </div>
+          </div></div>
         </div>
       </nav>
 

@@ -85,7 +85,7 @@
   cursor: pointer;
   z-index: 5200; /* above nav-links so it remains clickable */
   padding: 6px;
-  background: #0D0D0C;
+  background: transparent;
   border-radius: 6px;
   border: none;
 }
@@ -95,9 +95,9 @@
   display:block; height:3px; width:100%; background-color: #e8dac8;; border-radius:4px;
   transition: all 240ms cubic-bezier(.2,.9,.2,1);
 }
-.hamburger.active span:nth-child(1){ transform: rotate(45deg) translate(2.5px,5px); }
+.hamburger.active span:nth-child(1){ transform: rotate(45deg) translate(8.5px,5px); }
 .hamburger.active span:nth-child(2){ opacity:0; transform: translateX(-6px); }
-.hamburger.active span:nth-child(3){ transform: rotate(-45deg) translate(-1px,-1.5px); }
+.hamburger.active span:nth-child(3){ transform: rotate(-45deg) translate(5px,-1.5px); }
 
 /* Overlay shown when mobile panel is open. Sits under panel but above page content */
 .nav-overlay {
@@ -110,11 +110,21 @@
   opacity: 0;
 }
 .nav-overlay.open { display:block; opacity: 1; }
-
+.contents-nav{
+  display: flex;
+align-items: center;
+gap: 15px;
+}
 /* Mobile nav panel (slide-in) */
 @media (max-width: 768px) {
-  .hamburger { display:flex; }
-
+  .hamburger { display:flex; flex-direction: column; gap: 5px; }
+.contents-nav{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: 50px;
+}
   .nav-links {
     position: fixed;
     top: 0;
@@ -122,7 +132,7 @@
     left: auto;
     height: 100vh;
     width: 320px;
-    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    background: #000000;
     flex-direction: column;
     align-items: stretch;
     padding: 22px;
@@ -134,7 +144,7 @@
     z-index: 1401; /* above overlay */
   }
 
-  .nav-links.open { transform: translateX(0); }
+  .nav-links.open { transform: translateX(0); padding-top: 10px; }
 
   .nav-links a { display:inline-block; padding:12px 14px; font-size:1.05rem; color: #e8dac8;; border-radius:10px; }
 
@@ -147,8 +157,9 @@
 
   .login-btn, .logout-btn {
     width: 100%;
-    text-align: left;
+    text-align: center;
     padding: 12px;
+    margin-left: 0;
   background: #c5b9a7;
     border: 1px solid rgba(255,255,255,0.04);
     color: #0D0D0C;
