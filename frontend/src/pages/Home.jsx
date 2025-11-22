@@ -1,13 +1,17 @@
-// InterioHome.jsx (replace or merge into your existing file)
+// InterioHome.jsx (patched)
 import React, { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import "../assets/pages/Home.css";
+import { getImageUrl } from "../lib/api"; // <- use helper to prefix /uploads etc.
 
 const BACKEND_BASE =
   import.meta.env.VITE_BACKEND_BASE ||
   (typeof window !== "undefined" && window.location.hostname === "localhost"
     ? "http://localhost:5000"
     : "");
+
+// Developer test fallback (local file you provided)
+const DEV_TEST_FALLBACK = "/mnt/data/5e09c9d2-abc3-4ff4-b971-e555efa5c499.png";
 
 const homeTypes = [
   {
@@ -88,8 +92,42 @@ export default function InterioHome() {
     scrollByAmount(amount);
   }
 
-  // per-card image
+  // per-card image - fallback company logo
   const logoSrc = "/atenlogo.png";
+
+  // Resolve a usable image src for a testimonial
+  const resolveImageSrc = (t) => {
+    if (!t) return DEV_TEST_FALLBACK;
+
+    // 1) server-supplied absolute URL (preferred)
+    if (t.customer_image_url && /^https?:\/\//i.test(t.customer_image_url)) return t.customer_image_url;
+
+    // 2) stored value could already be absolute
+    if (t.customer_image && /^https?:\/\//i.test(t.customer_image)) return t.customer_image;
+
+    // 3) try helper to build absolute/prefixed url (handles leading /uploads)
+    try {
+      const maybe = getImageUrl(t.customer_image);
+      if (maybe && /^https?:\/\//i.test(maybe)) return maybe;
+    } catch (e) {
+      // ignore and try next
+    }
+
+    // 4) if it's a relative storage path (like "testimonials/..jpg" or "/uploads/.."),
+    // try to make absolute using BACKEND_BASE
+    if (t.customer_image) {
+      try {
+        let p = String(t.customer_image || "").trim();
+        if (p.startsWith("/")) p = p.slice(1);
+        if (BACKEND_BASE) return `${BACKEND_BASE.replace(/\/$/, "")}/${p}`;
+      } catch (e) {
+        // fallthrough to fallback
+      }
+    }
+
+    // 5) fallback: dev file or company logo
+    return DEV_TEST_FALLBACK || logoSrc;
+  };
 
   return (
     <div className="home-page">
@@ -109,7 +147,7 @@ export default function InterioHome() {
             <Link
               key={h.name}
               to={h.path}
-              className="service-card"
+              className="service-cards"
               style={{ backgroundImage: `url(${h.background})` }}
             >
               <div className="service-overlay" />
@@ -162,12 +200,26 @@ export default function InterioHome() {
           <div className="testimonials-track-wrap">
             <div className="testimonials-track" ref={trackRef} role="list">
               {testimonials.map((t) => {
-                const img = t.customer_image ? t.customer_image : logoSrc;
+                // resolve image per above helper
+                const img = resolveImageSrc(t) || logoSrc;
                 const role = t.service_type || t.role || "Customer";
                 return (
                   <figure className="testimonial-card" key={t.id || t._id} role="listitem">
                     <div className="testimonial-media">
-                      <img src={img} alt={`${t.name || "Customer"} photo`} onError={(e) => { e.currentTarget.src = logoSrc; }} />
+                      <img
+                        src={img}
+                        alt={`${t.name || "Customer"} photo`}
+                        onError={(e) => {
+                          // try server-provided url fallback, then logoSrc, then dev fallback
+                          if (e.currentTarget.src !== (t.customer_image_url || t.customer_image || DEV_TEST_FALLBACK || logoSrc)) {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = t.customer_image_url || t.customer_image || DEV_TEST_FALLBACK || logoSrc;
+                          } else {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = logoSrc;
+                          }
+                        }}
+                      />
                     </div>
                     <blockquote>{t.review || t.text}</blockquote>
                     <figcaption>

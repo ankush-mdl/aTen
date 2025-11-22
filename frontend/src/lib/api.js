@@ -36,6 +36,9 @@ function looksAbsoluteUrl(s) {
 
 /* -------------------------
    Image helper (getImageUrl)
+   - keeps original behaviour: absolute urls returned unchanged
+   - absolute path (starts with /) is prefixed with VITE_BACKEND_BASE
+   - raw storage path returns as-is (legacy)
    ------------------------- */
 export function getImageUrl(pathOrUrl) {
   if (!pathOrUrl) return "";
@@ -44,12 +47,9 @@ export function getImageUrl(pathOrUrl) {
   // if it's an absolute path returned by server (e.g., '/uploads/xyz.jpg'), prefix backend base
   const BACKEND_BASE = import.meta.env.VITE_BACKEND_BASE || "";
   if (s.startsWith("/")) return `${BACKEND_BASE}${s}`;
-  // if it's a raw storage path like 'projects/abc.jpg', you can either:
-  // - ask server to return signedUrl/publicUrl (recommended), or
-  // - construct a public url (not ideal for private buckets)
+  // if it's a raw storage path like 'projects/abc.jpg', return as-is (client should call server to get signed URL)
   return s;
 }
-
 
 /* -------------------------
    Auth helpers + fetch wrappers
@@ -105,3 +105,98 @@ export async function apiFetch(path, opts = {}) {
 }
 
 export default { getImageUrl, getAuthToken, sendWithAuth, apiFetch };
+
+/* -------------------------
+   New helpers for signed URLs & blob fetching
+   ------------------------- */
+
+/**
+ * Ask your backend for a signed URL for `storagePath`.
+ * Backend endpoint expected: GET /api/signed-url?path=<storagePath>&expires=<seconds>
+ * Response expected: { url: "<signedUrl>", expires: <seconds> } (or { url: "<signedUrl>" })
+ */
+export async function getSignedUrlFromServer(storagePath, expires = 60) {
+  if (!storagePath) throw new Error("storagePath required");
+  // If storagePath is already absolute, just return it
+  if (looksAbsoluteUrl(storagePath)) return { url: storagePath, expires: null };
+
+  // Use sendWithAuth so token is applied if your endpoint requires auth
+  const q = `?path=${encodeURIComponent(storagePath)}&expires=${encodeURIComponent(
+    String(expires)
+  )}`;
+  const res = await sendWithAuth(`/api/signed-url${q}`, { method: "GET" });
+  if (!res.ok) {
+    const err = new Error("Failed to get signed url");
+    err.body = res.data;
+    err.status = res.status;
+    throw err;
+  }
+  // allow backend flexibility: it might return { url } or { signedUrl } etc.
+  const payload = res.data || {};
+  const url = payload.url || payload.signedUrl || payload.signed_url || null;
+  const ttl = payload.expires || payload.ttl || null;
+  if (!url) {
+    const err = new Error("signed url not returned by server");
+    err.body = payload;
+    throw err;
+  }
+  return { url, expires: ttl };
+}
+
+/**
+ * Fetches the image as a blob (via signed url) and returns a stable object URL.
+ * Useful if you want image to keep displaying after the signed url expires.
+ * Caller must revoke the returned objectUrl with URL.revokeObjectURL when done.
+ */
+export async function fetchImageBlobObjectUrl(signedUrl) {
+  if (!looksAbsoluteUrl(signedUrl)) throw new Error("signedUrl must be absolute");
+  const resp = await fetch(signedUrl, { method: "GET" });
+  if (!resp.ok) {
+    const err = new Error(`Failed to fetch image blob (${resp.status})`);
+    err.status = resp.status;
+    throw err;
+  }
+  const blob = await resp.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  return objectUrl;
+}
+
+/**
+ * High level helper for the app to resolve an image preview.
+ * - storagePath can be:
+ *   - an absolute signed/public URL -> returned as-is
+ *   - a server absolute path like '/uploads/x.jpg' -> prefixed using VITE_BACKEND_BASE (getImageUrl handles this)
+ *   - a raw storage path like 'projects/a.jpg' -> request signed URL from server
+ *
+ * options:
+ *  - useBlob: if true, this will fetch the image blob and return an objectURL (stable after signed url expiry)
+ *  - expires: requested signed url TTL (seconds) when calling backend
+ *
+ * Returns: { src: string, expires: number|null, from: "absolute"|"signed"|"blob" }
+ */
+export async function resolveImagePreview(storagePathOrUrl, options = {}) {
+  const { useBlob = false, expires = 60 } = options;
+  if (!storagePathOrUrl) return { src: "", expires: null, from: null };
+
+  // 1) already an absolute url -> return unchanged
+  if (looksAbsoluteUrl(storagePathOrUrl)) {
+    return { src: storagePathOrUrl, expires: null, from: "absolute" };
+  }
+
+  // 2) If server returned absolute path like '/uploads/..' -> prefix and return
+  const maybePrefixed = getImageUrl(storagePathOrUrl);
+  if (looksAbsoluteUrl(maybePrefixed)) {
+    return { src: maybePrefixed, expires: null, from: "absolute" };
+  }
+
+  // 3) treat as raw storage path -> ask backend for signed url
+  const { url, expires: serverTtl = null } = await getSignedUrlFromServer(storagePathOrUrl, expires);
+
+  if (!useBlob) {
+    return { src: url, expires: serverTtl, from: "signed" };
+  }
+
+  // 4) use blob method to keep the image around after url expiry
+  const objectUrl = await fetchImageBlobObjectUrl(url);
+  return { src: objectUrl, expires: serverTtl, from: "blob" };
+}

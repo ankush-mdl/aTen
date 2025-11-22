@@ -85,12 +85,11 @@
 
 /* panels (configs, gallery etc) */
 .panel {
-  background: #BFADA3;
-  border: 1px solid var(--glass);
+  /* border: 1px solid var(--glass); */
   border-radius: 10px;
   padding: 12px;
   margin-bottom: 12px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 5px 12px rgba(168, 132, 65, 0.226);
 }
 .panel-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
 .panel-header h4 { margin:0; font-size:1rem; }

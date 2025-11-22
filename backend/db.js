@@ -74,6 +74,21 @@ db.run(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE
   )
 `);
+db.run(`
+  CREATE TABLE IF NOT EXISTS wardrobe_enquiries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    type TEXT,
+    email TEXT,
+    city TEXT,
+    length TEXT,
+    wardrobe_type TEXT,
+    material TEXT,
+    finish TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE
+  )
+`);
 // Create projects table
 db.run(`
   CREATE TABLE IF NOT EXISTS projects (

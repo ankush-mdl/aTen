@@ -3,9 +3,10 @@ const express = require("express");
 const supabase = require("../supabase");
 const router = express.Router();
 
-/**
- * Helper to fetch a testimonial by id
- */
+const BUCKET = "uploads";
+const SIGNED_URL_TTL = 60 * 60 * 2; // 2 hours for generated URLs in list responses
+
+// Helper to fetch a testimonial by id
 async function getTestimonialById(id) {
   const { data, error } = await supabase
     .from("testimonials")
@@ -18,7 +19,11 @@ async function getTestimonialById(id) {
 
 /**
  * GET /api/testimonials
- * Returns all testimonials (most recent first), filtered by service type and rating if applicable
+ * Returns { items: [...], page, limit }
+ * For each testimonial we attempt to add `customer_image_url`:
+ *  - If customer_image is an absolute URL, use as-is
+ *  - Else (it's a storage path) -> try createSignedUrl(path) -> use signedUrl
+ *  - If signed fails, fallback to getPublicUrl(path)
  */
 router.get("/", async (req, res) => {
   try {
@@ -33,7 +38,6 @@ router.get("/", async (req, res) => {
     }
 
     if (req.query.rating) {
-      // allow numeric or string rating
       const ratingVal = parseInt(req.query.rating);
       if (!isNaN(ratingVal)) {
         query = query.eq("rating", ratingVal);
@@ -49,7 +53,44 @@ router.get("/", async (req, res) => {
       return res.status(500).json({ error: error.message || "Database error" });
     }
 
-    return res.json({ items: rows || [], page, limit });
+    const items = Array.isArray(rows) ? rows : [];
+
+    // Build customer_image_url for each item
+    const itemsWithUrls = await Promise.all(items.map(async (row) => {
+      const item = { ...row };
+      try {
+        const pathOrUrl = row.customer_image;
+
+        if (!pathOrUrl) {
+          item.customer_image_url = null;
+        } else if (/^https?:\/\//i.test(pathOrUrl)) {
+          // already an absolute url
+          item.customer_image_url = pathOrUrl;
+        } else {
+          // assume it's a storage path. Try to generate signed url
+          try {
+            const { data: sData, error: sErr } = await supabase.storage.from(BUCKET).createSignedUrl(pathOrUrl, SIGNED_URL_TTL);
+            if (!sErr && sData && sData.signedUrl) {
+              item.customer_image_url = sData.signedUrl;
+            } else {
+              // fallback to public url
+              const { data: pData } = supabase.storage.from(BUCKET).getPublicUrl(pathOrUrl);
+              item.customer_image_url = pData?.publicUrl || null;
+            }
+          } catch (errCreate) {
+            console.warn("createSignedUrl failed for", pathOrUrl, errCreate);
+            const { data: pData } = supabase.storage.from(BUCKET).getPublicUrl(pathOrUrl);
+            item.customer_image_url = pData?.publicUrl || null;
+          }
+        }
+      } catch (err) {
+        console.warn("customer_image_url resolution error:", err);
+        item.customer_image_url = null;
+      }
+      return item;
+    }));
+
+    return res.json({ items: itemsWithUrls, page, limit });
   } catch (err) {
     console.error("GET /api/testimonials unexpected error:", err);
     return res.status(500).json({ error: err.message || "Server error" });
@@ -58,8 +99,8 @@ router.get("/", async (req, res) => {
 
 /**
  * POST /api/testimonials
- * Body: { name, review, customer_type, customer_image, rating, service_type, customer_phone }
- * Protected: requires verifyFirebaseToken
+ * Body: { name, review, customer_type, customer_image (path), rating, service_type, customer_phone }
+ * Protected: your existing middleware may handle auth on certain routes — keep as-is
  */
 router.post("/", async (req, res) => {
   try {
@@ -70,9 +111,9 @@ router.post("/", async (req, res) => {
     const service_type = body.service_type ? String(body.service_type).trim() : null;
     const customer_phone = body.customer_phone ? String(body.customer_phone).trim() : null;
     const customer_type = body.customer_type ? String(body.customer_type).trim() : null;
+    // IMPORTANT: expect `customer_image` in DB to be the canonical storage path (e.g., 'testimonials/..jpg')
     const customer_image = body.customer_image ? String(body.customer_image).trim() : null;
 
-    // rating validation
     let rating = parseInt(body.rating);
     if (isNaN(rating) || rating < 1 || rating > 5) rating = null;
 
@@ -88,7 +129,6 @@ router.post("/", async (req, res) => {
       customer_phone: customer_phone || null,
       customer_image: customer_image || null,
       rating,
-      // isHome, page default handled by DB (if column exists)
     };
 
     const { data, error } = await supabase
@@ -111,8 +151,7 @@ router.post("/", async (req, res) => {
 
 /**
  * PUT /api/testimonials/:id
- * Body: { name, review, customer_type, customer_image, rating, isHome, page }
- * Protected: requires verifyFirebaseToken
+ * (unchanged from your existing implementation — it already updates customer_image if provided)
  */
 router.put("/:id", async (req, res) => {
   const { id } = req.params;
@@ -142,7 +181,6 @@ router.put("/:id", async (req, res) => {
       ? (body.customer_image === null ? null : String(body.customer_image).trim())
       : existing.customer_image;
 
-    // rating update + validation (allow explicit null to keep existing)
     let rating;
     if (Object.prototype.hasOwnProperty.call(body, "rating")) {
       rating = parseInt(body.rating);
@@ -151,7 +189,6 @@ router.put("/:id", async (req, res) => {
       rating = existing.rating;
     }
 
-    // isHome (explicit set allowed)
     let isHome;
     if (Object.prototype.hasOwnProperty.call(body, "isHome")) {
       isHome = body.isHome ? 1 : 0;
@@ -159,7 +196,6 @@ router.put("/:id", async (req, res) => {
       isHome = existing.isHome || 0;
     }
 
-    // page: allow explicit null -> cleared
     let page;
     if (Object.prototype.hasOwnProperty.call(body, "page")) {
       page = body.page === null ? null : String(body.page).trim();
@@ -168,7 +204,6 @@ router.put("/:id", async (req, res) => {
       page = existing.page || null;
     }
 
-    // If page is set (non-null), require it to match service_type (if service_type exists)
     if (page !== null) {
       const serviceForCheck = service_type !== null ? service_type : existing.service_type;
       if (!serviceForCheck || String(page).toLowerCase() !== String(serviceForCheck).toLowerCase()) {
@@ -212,8 +247,7 @@ router.put("/:id", async (req, res) => {
 });
 
 /**
- * DELETE /api/testimonials/:id
- * Protected: requires verifyFirebaseToken
+ * DELETE /api/testimonials/:id (unchanged)
  */
 router.delete("/:id", async (req, res) => {
   const { id } = req.params;

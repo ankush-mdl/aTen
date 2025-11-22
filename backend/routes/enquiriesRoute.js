@@ -47,6 +47,20 @@ const TABLE_MAP = {
       "kitchen_theme",
     ],
   },
+  // NEW: wardrobe enquiries support
+  wardrobe: {
+    table: "wardrobe_enquiries",
+    editable: [
+      "user_id",
+      "email",
+      "type",
+      "city",
+      "length",
+      "wardrobe_type",
+      "material",
+      "finish",
+    ],
+  },
 };
 
 // Helper: map a raw Supabase row into expected output fields based on tableKey
@@ -69,6 +83,10 @@ function mapRowToOutput(tableKey, row) {
     message: row.message ?? null,
     bathroom_type: row.bathroom_type ?? null,
     kitchen_theme: row.kitchen_theme ?? null,
+    // WARDROBE-specific fields
+    length: row.length ?? null,
+    wardrobe_type: row.wardrobe_type ?? null,
+    finish: row.finish ?? null,
     created_at: row.created_at ?? null,
     // keep raw row attached for debugging if needed
     _raw: row,
@@ -77,7 +95,7 @@ function mapRowToOutput(tableKey, row) {
 }
 
 /**
- * GET /api/enquiries?table=home|custom|kb
+ * GET /api/enquiries?table=home|custom|kb|wardrobe
  * Returns JSON { items: [ ...rows ] }.
  */
 router.get("/", async (req, res) => {
@@ -86,7 +104,7 @@ router.get("/", async (req, res) => {
     if (!tableKey || !TABLE_MAP[tableKey]) {
       return res
         .status(400)
-        .json({ error: "Invalid or missing table. Use home|custom|kb" });
+        .json({ error: "Invalid or missing table. Use home|custom|kb|wardrobe" });
     }
 
     const table = TABLE_MAP[tableKey].table;
@@ -113,7 +131,7 @@ router.get("/", async (req, res) => {
 
 /**
  * GET /api/enquiries/related?user_id=... | ?phone=... | ?email=...
- * Returns { items: [ ... ] } from all three tables (deduped)
+ * Returns { items: [ ... ] } from all tables (deduped)
  */
 router.get("/related", async (req, res) => {
   try {
@@ -181,7 +199,7 @@ router.get("/related", async (req, res) => {
       return rows || [];
     }
 
-    // Run queries for all three tables
+    // Run queries for all tables in TABLE_MAP
     const keys = Object.keys(TABLE_MAP);
     const resultsByTable = await Promise.all(keys.map((k) => queryTableFor(k)));
 

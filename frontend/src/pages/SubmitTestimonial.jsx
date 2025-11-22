@@ -11,12 +11,6 @@ const BACKEND_BASE =
     ? "http://localhost:5000"
     : "");
 
-/**
- * SubmitTestimonial page
- * - reads customer_phone from localStorage
- * - when user clicks Quick login, navigates to /login with { state: { from: location } }
- * - after login, the PhoneLogin page will redirect back here if the state is present
- */
 export default function SubmitTestimonial() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [foundTestimonials, setFoundTestimonials] = useState([]);
@@ -29,17 +23,16 @@ export default function SubmitTestimonial() {
     customer_type: "",
     service_type: "",
     rating: "",
-    customer_image: "",
+    customer_image: "", // NOTE: canonical storage path (e.g., 'testimonials/..jpg')
     customer_phone: "",
   });
 
-  const [preview, setPreview] = useState("");
+  const [preview, setPreview] = useState(""); // previewable absolute URL or blob URL
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const fileRef = useRef(null);
 
-  // read phone helpers (search common keys in localStorage)
   function extractPhoneFromObject(obj) {
     if (!obj || typeof obj !== "object") return "";
     return (
@@ -81,7 +74,6 @@ export default function SubmitTestimonial() {
     }
   }
 
-  // on mount read saved phone
   useEffect(() => {
     const p = getSavedCustomerPhone();
     if (p) {
@@ -91,7 +83,6 @@ export default function SubmitTestimonial() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // when customerPhone changes fetch user's testimonials
   useEffect(() => {
     async function fetchUserTestimonials() {
       if (!customerPhone) {
@@ -105,6 +96,7 @@ export default function SubmitTestimonial() {
           return;
         }
         const j = await res.json();
+        // Now testimonials have `customer_image_url` from server
         const arr = j.items || j || [];
         setFoundTestimonials(arr || []);
       } catch (err) {
@@ -115,7 +107,6 @@ export default function SubmitTestimonial() {
     fetchUserTestimonials();
   }, [customerPhone]);
 
-  // preview cleanup on unmount
   useEffect(() => {
     return () => {
       if (preview && preview.startsWith("blob:")) {
@@ -124,20 +115,21 @@ export default function SubmitTestimonial() {
     };
   }, [preview]);
 
-  // file upload
+  // Upload handler: upload file to server; server returns { path, signedUrl, publicUrl }
   async function handleUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 3 * 1024 * 1024) {
-      toast.error("Image must be under 3MB");
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("Image must be under 8MB");
       return;
     }
 
-    const localUrl = URL.createObjectURL(file);
+    // Show local preview immediately
+    const localBlob = URL.createObjectURL(file);
     if (preview && preview.startsWith("blob:")) {
       try { URL.revokeObjectURL(preview); } catch (e) {}
     }
-    setPreview(localUrl);
+    setPreview(localBlob);
 
     const fd = new FormData();
     fd.append("image", file);
@@ -151,28 +143,42 @@ export default function SubmitTestimonial() {
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j?.error || j?.message || "Upload failed");
-      if (!j?.url) throw new Error("Upload succeeded but no URL returned by server");
 
-      let serverUrl = j.url;
-      try {
-        if (!/^https?:\/\//i.test(serverUrl)) {
-          serverUrl = new URL(serverUrl, BACKEND_BASE || window.location.origin).toString();
+      // server returns: { path, publicUrl, signedUrl }
+      const path = j.path || null;
+      const signedUrl = j.signedUrl || null;
+      const publicUrl = j.publicUrl || null;
+
+      if (!path) {
+        throw new Error("Server did not return storage path for uploaded image");
+      }
+
+      // prefer signedUrl for immediate preview, fallback to publicUrl
+      const previewUrl = signedUrl || publicUrl || null;
+
+      // set canonical path in form (store this in DB) and set preview to the usable URL
+      setForm((f) => ({ ...f, customer_image: path }));
+      if (previewUrl) {
+        setPreview(previewUrl);
+      } else {
+        // fallback: if server didn't give usable absolute url, try build absolute from path
+        try {
+          const built = new URL(path, BACKEND_BASE || window.location.origin).toString();
+          setPreview(built);
+        } catch (err) {
+          // leave the local blob preview if nothing else
         }
-      } catch (err) {
-        console.warn("Could not build absolute URL from", j.url, err);
       }
 
-      if (localUrl && localUrl.startsWith("blob:")) {
-        try { URL.revokeObjectURL(localUrl); } catch (e) {}
-      }
-
-      setForm((f) => ({ ...f, customer_image: serverUrl }));
-      setPreview(serverUrl);
       toast.success("Image uploaded", { id: "user-up" });
     } catch (err) {
       console.error("Upload error:", err);
       toast.error(err.message || "Image upload failed", { id: "user-up" });
     } finally {
+      // revoke local blob (we replaced or will replace preview)
+      if (localBlob && localBlob.startsWith("blob:")) {
+        try { URL.revokeObjectURL(localBlob); } catch (e) {}
+      }
       setUploading(false);
     }
   }
@@ -186,7 +192,6 @@ export default function SubmitTestimonial() {
     if (fileRef.current) fileRef.current.value = null;
   }
 
-  // when service_type changes, determine edit/create
   useEffect(() => {
     if (!form.service_type) {
       setEditingId(null);
@@ -206,10 +211,11 @@ export default function SubmitTestimonial() {
         customer_type: found.customer_type || "",
         service_type: found.service_type || form.service_type,
         rating: found.rating != null ? String(found.rating) : "",
-        customer_image: found.customer_image || "",
+        customer_image: found.customer_image || "", // canonical path
         customer_phone: customerPhone,
       });
-      setPreview(found.customer_image || "");
+      // preview uses server-supplied customer_image_url (GET returned it)
+      setPreview(found.customer_image_url || found.customer_image || "");
     } else {
       setEditingId(null);
       setForm((s) => ({ ...s, customer_phone: customerPhone }));
@@ -217,7 +223,6 @@ export default function SubmitTestimonial() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.service_type, foundTestimonials, customerPhone]);
 
-  // submit create/update
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -247,6 +252,7 @@ export default function SubmitTestimonial() {
         customer_type: form.customer_type ? String(form.customer_type).trim() : "",
         service_type: String(form.service_type),
         rating: ratingNum,
+        // IMPORTANT: we send canonical storage path (not signedUrl) so server stores non-expiring reference
         customer_image: form.customer_image ? String(form.customer_image).trim() : "",
         customer_phone: customerPhone,
       };
@@ -271,7 +277,7 @@ export default function SubmitTestimonial() {
 
       toast.success(editingId ? "Testimonial updated" : "Thank you for your testimonial!");
 
-      // refresh user's testimonials
+      // refresh user's testimonials list
       const refresh = await fetch(`${BACKEND_BASE}/api/testimonials?customer_phone=${encodeURIComponent(customerPhone)}&limit=50`);
       if (refresh.ok) {
         const body = await refresh.json().catch(() => ({}));
@@ -302,7 +308,6 @@ export default function SubmitTestimonial() {
   const needLogin = !customerPhone;
   const serviceTypeLocked = Boolean(editingId);
 
-  // navigate to login and include from state so login page can redirect back
   const handleQuickLogin = () => {
     navigate("/login", { state: { from: location } });
   };

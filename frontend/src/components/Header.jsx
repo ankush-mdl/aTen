@@ -56,7 +56,7 @@ export default function Navbar() {
         <Link to="/" onClick={() => closeMenu()}>
           <img src="/atenwhitelogo.png" alt="aTen Logo" className="logo-header" />
         </Link>
-
+       
         <button
           ref={hamburgerRef}
           className={`hamburger ${menuOpen ? "active" : ""}`}
@@ -71,6 +71,10 @@ export default function Navbar() {
         </button>
 
         <div className={`nav-links ${menuOpen ? "open" : ""}`} aria-hidden={!menuOpen && window.innerWidth <= 768}>
+
+          <Link to="/interio" className="whatsapp-no">Interio</Link>
+          <Link to="/properties" className="whatsapp-no">Browse Properties</Link>
+
           <div className="contents-nav"> {isAdmin &&<Link to="/admin" onClick={() => closeMenu()}>
             <span className="whatsapp-no">Admin</span>
           </Link>}

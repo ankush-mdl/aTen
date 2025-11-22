@@ -1,13 +1,18 @@
+// src/pages/admin/TestimonialsAdmin.jsx
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import toast from "react-hot-toast";
 import "../../assets/pages/admin/TestimonialsAdmin.css";
 import Dropdown from "../../components/Dropdown"; // Import Dropdown component
+import { getImageUrl } from "../../lib/api";
 
 const BACKEND_BASE =
   import.meta.env.VITE_BACKEND_BASE ||
   (typeof window !== "undefined" && window.location.hostname === "localhost"
     ? "http://localhost:5000"
     : "");
+
+// Local test image (developer-provided). In production this will be replaced by real URLs.
+const DEV_TEST_FALLBACK = "/mnt/data/5e09c9d2-abc3-4ff4-b971-e555efa5c499.png";
 
 export default function TestimonialsAdmin() {
   const [items, setItems] = useState([]);
@@ -108,6 +113,40 @@ export default function TestimonialsAdmin() {
 
   const displayPhone = (t) => t.customer_phone || t.phone || t.user_phone || "";
 
+  // Build a safe absolute src for the avatar image.
+  // Priority:
+  // 1) t.customer_image_url (server-supplied signed/public URL)
+  // 2) t.customer_image if it's already absolute
+  // 3) build absolute URL using BACKEND_BASE + t.customer_image (if relative path)
+  // 4) fallback to a dev test image file
+  const buildImageSrc = (t) => {
+    if (!t) return DEV_TEST_FALLBACK;
+    // 1) server-provided resolved URL
+    if (t.customer_image_url && /^https?:\/\//i.test(t.customer_image_url)) return t.customer_image_url;
+    // 2) stored value
+    if (t.customer_image) {
+      if (/^https?:\/\//i.test(t.customer_image)) return t.customer_image;
+      // try to construct via getImageUrl helper (handles /uploads prefixing)
+      try {
+        const maybe = getImageUrl(t.customer_image);
+        if (maybe && /^https?:\/\//i.test(maybe)) return maybe;
+      } catch (e) {
+        // fallthrough
+      }
+      // fallback: combine with BACKEND_BASE
+      try {
+        // make sure we don't produce double slashes
+        let p = String(t.customer_image || "").trim();
+        if (p.startsWith("/")) p = p.slice(1);
+        if (BACKEND_BASE) return `${BACKEND_BASE.replace(/\/$/, "")}/${p}`;
+      } catch (e) {
+        // ignore
+      }
+    }
+    // final fallback
+    return DEV_TEST_FALLBACK;
+  };
+
   return (
     <div className="testimonials-admin improved-ui">
       <div className="ta-toolbar" style={{ alignItems: "center", gap: 12 }}>
@@ -154,82 +193,100 @@ export default function TestimonialsAdmin() {
         ) : visible.length === 0 ? (
           <div className="ta-empty">No testimonials found.</div>
         ) : (
-          visible.map((t) => (
-            <div key={t.id || t._id} className="ta-row" style={{ alignItems: "flex-start" }}>
-              <div className="ta-left" style={{ flex: 1 }}>
-                <div className="ta-meta" style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                  <div className="ta-avatar" style={{ width: 56, height: 56, borderRadius: 6, overflow: "hidden", background: "#f2f2f2" }}>
-                    {t.customer_image ? <img src={t.customer_image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <div className="ta-initial" style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", fontSize: 18 }}>{(t.name||"").charAt(0).toUpperCase()}</div>}
-                  </div>
-
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-                      <div className="ta-name" style={{ fontWeight: 700 }}>{t.name}</div>
-                      <div style={{ fontSize: 13, color: "#666" }}>{t.customer_type || "—"}</div>
-                      <div style={{ fontSize: 13, color: "#666" }}>{t.service_type ? `(${t.service_type})` : ""}</div>
-                      <div style={{ fontSize: 12, color: "#999", marginLeft: "auto" }}>{t.created_at ? new Date(t.created_at).toLocaleDateString() : ""}</div>
+          visible.map((t) => {
+            const avatarSrc = buildImageSrc(t);
+            return (
+              <div key={t.id || t._id} className="ta-row" style={{ alignItems: "flex-start" }}>
+                <div className="ta-left" style={{ flex: 1 }}>
+                  <div className="ta-meta" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                    <div className="ta-avatar" style={{ width: 56, height: 56, borderRadius: 6, overflow: "hidden", background: "#f2f2f2" }}>
+                      {avatarSrc ? (
+                        <img
+                          src={avatarSrc}
+                          alt={t.name || "avatar"}
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          onError={(e) => {
+                            // fallback to the dev test image if browser fails to load
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = DEV_TEST_FALLBACK;
+                          }}
+                        />
+                      ) : (
+                        <div className="ta-initial" style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", fontSize: 18 }}>
+                          {(t.name || "").charAt(0).toUpperCase()}
+                        </div>
+                      )}
                     </div>
 
-                    <div style={{ marginTop: 8, color: "#333" }} className="ta-review">{t.review}</div>
-
-                    <div style={{ marginTop: 8, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                        <strong style={{ fontSize: 13 }}>{t.rating ?? "—"}</strong>
-                        <div style={{ display: "flex", gap: 4 }}>
-                          {Array.from({ length: 5 }).map((_, i) => (
-                            <svg key={i} width="12" height="12" viewBox="0 0 24 24" fill={i < (t.rating || 0) ? "#a88441" : "none"} stroke="#a88441" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M12 .587l3.668 7.431L23.6 9.753l-5.8 5.654L19.335 24 12 19.897 4.665 24l1.535-8.593L.4 9.753l7.932-1.735z"/>
-                            </svg>
-                          ))}
-                        </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                        <div className="ta-name" style={{ fontWeight: 700 }}>{t.name}</div>
+                        <div style={{ fontSize: 13, color: "#666" }}>{t.customer_type || "—"}</div>
+                        <div style={{ fontSize: 13, color: "#666" }}>{t.service_type ? `(${t.service_type})` : ""}</div>
+                        <div style={{ fontSize: 12, color: "#999", marginLeft: "auto" }}>{t.created_at ? new Date(t.created_at).toLocaleDateString() : ""}</div>
                       </div>
 
-                      {displayPhone(t) ? <div style={{ fontSize: 13, color: "#666" }}>📞 {displayPhone(t)}</div> : null}
-                      {t.page ? <div style={{ fontSize: 12, color: "#0b7a66", border: "1px solid #e6f3ef", padding: "2px 8px", borderRadius: 6 }}>{t.page}</div> : null}
+                      <div style={{ marginTop: 8, color: "#333" }} className="ta-review">{t.review}</div>
+
+                      <div style={{ marginTop: 8, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                          <strong style={{ fontSize: 13 }}>{t.rating ?? "—"}</strong>
+                          <div style={{ display: "flex", gap: 4 }}>
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <svg key={i} width="12" height="12" viewBox="0 0 24 24" fill={i < (t.rating || 0) ? "#a88441" : "none"} stroke="#a88441" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 .587l3.668 7.431L23.6 9.753l-5.8 5.654L19.335 24 12 19.897 4.665 24l1.535-8.593L.4 9.753l7.932-1.735z"/>
+                              </svg>
+                            ))}
+                          </div>
+                        </div>
+
+                        {displayPhone(t) ? <div style={{ fontSize: 13, color: "#666" }}>📞 {displayPhone(t)}</div> : null}
+                        {t.page ? <div style={{ fontSize: 12, color: "#0b7a66", border: "1px solid #e6f3ef", padding: "2px 8px", borderRadius: 6 }}>{t.page}</div> : null}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="ta-right" style={{ minWidth: 220, display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <button
-                    className={`btn ${t.isHome ? "" : "ghost"}`}
-                    onClick={() => handleToggleHome(t)}
-                    title={t.isHome ? "Remove from Home" : "Show on Home"}
-                  >
-                    {t.isHome ? "Home ✓" : "Home"}
-                  </button>
-
-                  <div style={{ width: 160 }}>
+                <div className="ta-right" style={{ minWidth: 220, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     <button
-                      className={`btn ${String(t.page || "").toLowerCase() === String(t.service_type || "").toLowerCase() ? "" : "ghost"}`}
-                      onClick={() => handleSetPageToServiceType(t)}
-                      title={t.service_type ? `Toggle show on ${t.service_type}` : "No service_type set"}
+                      className={`btn ${t.isHome ? "" : "ghost"}`}
+                      onClick={() => handleToggleHome(t)}
+                      title={t.isHome ? "Remove from Home" : "Show on Home"}
                     >
-                      {String(t.page || "").toLowerCase() === String(t.service_type || "").toLowerCase() ? `Page: ${t.service_type} ✓` : `Set Page → ${t.service_type || "—"}`}
+                      {t.isHome ? "Home ✓" : "Home"}
                     </button>
+
+                    <div style={{ width: 160 }}>
+                      <button
+                        className={`btn ${String(t.page || "").toLowerCase() === String(t.service_type || "").toLowerCase() ? "" : "ghost"}`}
+                        onClick={() => handleSetPageToServiceType(t)}
+                        title={t.service_type ? `Toggle show on ${t.service_type}` : "No service_type set"}
+                      >
+                        {String(t.page || "").toLowerCase() === String(t.service_type || "").toLowerCase() ? `Page: ${t.service_type} ✓` : `Set Page → ${t.service_type || "—"}`}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="btn danger small" onClick={() => {
+                      if (!confirm("Delete this testimonial? This action cannot be undone.")) return;
+                      fetch(`${BACKEND_BASE}/api/testimonials/${t.id || t._id}`, { method: "DELETE" })
+                        .then(async (res) => {
+                          if (!res.ok) throw new Error("Delete failed");
+                          toast.success("Deleted");
+                          await load();
+                        })
+                        .catch((err) => {
+                          console.error(err);
+                          toast.error("Delete failed");
+                        });
+                    }}>Delete</button>
                   </div>
                 </div>
-
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button className="btn danger small" onClick={() => {
-                    if (!confirm("Delete this testimonial? This action cannot be undone.")) return;
-                    fetch(`${BACKEND_BASE}/api/testimonials/${t.id || t._id}`, { method: "DELETE" })
-                      .then(async (res) => {
-                        if (!res.ok) throw new Error("Delete failed");
-                        toast.success("Deleted");
-                        await load();
-                      })
-                      .catch((err) => {
-                        console.error(err);
-                        toast.error("Delete failed");
-                      });
-                  }}>Delete</button>
-                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

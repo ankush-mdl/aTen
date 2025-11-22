@@ -3,6 +3,7 @@
 /* ---------- Page base & resets ---------- */
 .project-detail {
   max-width: 1100px;
+  min-height:100vh;
   margin: 0 auto;
   padding: 20px;
   box-sizing: border-box;
@@ -14,12 +15,12 @@
 
 /* unified panel card used everywhere */
 .panel-card {
-  background: #fff;
-  border: 1px solid #e5d7be;
+  /* background: #fff; */
+  /* border: 1px solid #e5d7be; */
   border-radius: 10px;
   padding: 18px;
   margin-bottom: 18px;
-  box-shadow: 0 12px 26px rgba(168, 132, 65, 0.3);
+  /* box-shadow: 0 12px 26px rgba(168, 132, 65, 0.3); */
 }
 
 /* ---------- Hero ---------- */
