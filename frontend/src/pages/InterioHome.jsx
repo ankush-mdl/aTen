@@ -1,3 +1,4 @@
+// File: src/pages/InterioHome.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -10,8 +11,8 @@ const BACKEND_BASE =
     ? "http://localhost:5000"
     : "");
 
-// developer-provided test image (local file)
-const DEV_TEST_FALLBACK = "/mnt/data/5e09c9d2-abc3-4ff4-b971-e555efa5c499.png";
+// developer-provided test image (local file) - using uploaded path from session
+const DEV_TEST_FALLBACK = "/mnt/data/4752a5a0-b285-4dc9-b344-1b7bc18e4618.png";
 
 const SERVICES = [
   {
@@ -26,21 +27,21 @@ const SERVICES = [
     title: "Kitchen Makeover",
     subtitle: "Smart kitchens that cook up joy",
     img: "./public/kitchen1.jpg",
-    path: "/catalog/kitchen",
+    path: "/kitchen",
   },
   {
     id: "bathroom",
     title: "Bathroom Renovation",
     subtitle: "Luxury & smart wetspaces",
     img: "./public/bathroom1.jpg",
-    path: "/catalog/bathroom",
+    path: "/bathroom",
   },
   {
     id: "wardrobe",
     title: "Wardrobe",
     subtitle: "Elegant storage solutions",
     img: "./public/wardrobe.jpg",
-    path: "/catalog/wardrobe",
+    path: "/wardrobe",
   },
 ];
 
@@ -48,7 +49,7 @@ const TRUST_PERKS = [
   { id: 1, title: "Design Experts", desc: "In-house designers & architects", icon: "./public/businessman.png" },
   { id: 2, title: "End-to-end Delivery", desc: "From design to execution", icon: "./public/message.png" },
   { id: 3, title: "Quality Materials", desc: "Premium sourced materials", icon: "./public/quality.png" },
-  { id: 4, title: "Transparent Pricing", desc: "No hidden costs", icon: "./public/price-tag.png"},
+  { id: 4, title: "Transparent Pricing", desc: "No hidden costs", icon: "./public/price-tag.png" },
 ];
 
 const INSPIRATIONS = [
@@ -82,20 +83,6 @@ function isInterioItem(item = {}) {
 export default function InterioHome() {
   const navigate = useNavigate();
 
-  const handleProtectedNavigation = (path) => {
-    try {
-      const user = JSON.parse(localStorage.getItem("user"));
-      if (!user) {
-        toast.error("Please login to continue!");
-        navigate("/login");
-        return;
-      }
-      navigate(path);
-    } catch (e) {
-      toast.error("Please login to continue!");
-      navigate("/login");
-    }
-  };
 
   // testimonials + projects (existing logic)
   const [testimonials, setTestimonials] = useState([]);
@@ -109,38 +96,38 @@ export default function InterioHome() {
   const projRef = useRef(null);
 
   // hero images (you can replace with curated images later)
- const HERO_SLIDES = [
-  {
-    id: "hero-1",
-    img: "./public/bedroom1.jpg",
-    title: "Design your dream home",
-    subtitle: "End-to-end full-home furnishing with curated interiors",
-    ctas: [
-      { type: "modal", label: "Get Started (Full Home)", action: "openFullHomeModal" },
-      { type: "link", label: "See Projects", to: "/projects" },
-    ],
-  },
-  {
-    id: "hero-2",
-    img: "./public/bedroom2.jpg",
-    title: "Give your kitchen a fresh life",
-    subtitle: "Smart layouts, durable finishes and smart storage",
-    ctas: [
-      { type: "navigate", label: "Explore Kitchens", to: "/catalog/kitchen" },
-      { type: "link", label: "Kitchen Ideas", to: "/inspiration/kitchen" },
-    ],
-  },
-  {
-    id: "hero-3",
-    img: "./public/commercial.jpg",
-    title: "Commercial Interiors",
-    subtitle: "Offices | Retail | Hospitality spaces designed to impress",
-    ctas: [
-      { type: "navigate", label: "Get Quote", to: "/catalog/commercial" },
-      { type: "link", label: "View Packages", to: "/packages" },
-    ],
-  },
-];
+  const HERO_SLIDES = [
+    {
+      id: "hero-1",
+      img: "./public/bedroom1.jpg",
+      title: "Design your dream home",
+      subtitle: "End-to-end full-home furnishing with curated interiors",
+      ctas: [
+        { type: "modal", label: "Get Started (Full Home)", action: "openFullHomeModal" },
+        { type: "link", label: "See Projects", to: "/projects" },
+      ],
+    },
+    {
+      id: "hero-2",
+      img: "./public/bedroom2.jpg",
+      title: "Give your kitchen a fresh life",
+      subtitle: "Smart layouts, durable finishes and smart storage",
+      ctas: [
+        { type: "navigate", label: "Explore Kitchens", to: "/kitchen" },
+        { type: "link", label: "Kitchen Ideas", to: "/inspiration/kitchen" },
+      ],
+    },
+    {
+      id: "hero-3",
+      img: "./public/commercial.jpg",
+      title: "Commercial Interiors",
+      subtitle: "Offices | Retail | Hospitality spaces designed to impress",
+      ctas: [
+        { type: "navigate", label: "Get Quote", to: "/custom" },
+        { type: "link", label: "View Packages", to: "/packages" },
+      ],
+    },
+  ];
   const heroRef = useRef(null);
   const handleHeroCta = (cta) => {
     if (!cta) return;
@@ -149,7 +136,7 @@ export default function InterioHome() {
       return;
     }
     if (cta.type === "navigate") {
-      handleProtectedNavigation(cta.to);
+      navigate(cta.to);
       return;
     }
     if (cta.type === "link") {
@@ -158,6 +145,7 @@ export default function InterioHome() {
       return;
     }
   };
+
   useEffect(() => {
     let mounted = true;
     async function loadTestis() {
@@ -249,7 +237,7 @@ export default function InterioHome() {
 
   // --- Modal state for Full Home selection ---
   const [showRoomModal, setShowRoomModal] = useState(false);
-  const [selectedRoom, setSelectedRoom] = useState(""); // "1BHK" | "2BHK" | "3BHK" | "3+BHK"
+  const [selectedRoom, setSelectedRoom] = useState(""); // "1BHK" | "2BHK" | "3BHK" | "4BHK" | "4+BHK" | "studio"
 
   const openFullHomeModal = (e) => {
     e?.preventDefault?.();
@@ -263,7 +251,7 @@ export default function InterioHome() {
       return;
     }
     setShowRoomModal(false);
-    // navigate to full-home with query param
+    // navigate to full-home with query param - use /home route and add encoded room
     navigate(`/home/${encodeURIComponent(selectedRoom)}`);
   };
 
@@ -272,7 +260,7 @@ export default function InterioHome() {
       {/* HERO: full-bleed carousel */}
       <header className="hero-landing">
         <div className="hero-track" ref={heroRef}>
-           {HERO_SLIDES.map((slide) => {
+          {HERO_SLIDES.map((slide) => {
             const bg = getImageUrl(slide.img) || slide.img || DEV_TEST_FALLBACK;
             return (
               <div
@@ -288,13 +276,11 @@ export default function InterioHome() {
 
                     <div className="hero-cta" style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 12 }}>
                       {slide.ctas && slide.ctas.map((cta, i) => {
-                        // if CTA type is link that should be a normal Link; others trigger handlers
                         if (cta.type === "link") {
                           return (
                             <Link key={i} to={cta.to} className="btn hero-ghost">{cta.label}</Link>
                           );
                         }
-                        // render button that calls handler
                         return (
                           <button
                             key={i}
@@ -329,20 +315,40 @@ export default function InterioHome() {
 
         <div className="services-grid">
           {SERVICES.map((s) => (
-            <div key={s.id} className="service-card" onClick={(e) => {
-              // open modal specifically when clicking full-home service
-              if (s.id === "full-home") return openFullHomeModal(e);
-              navigate(s.path);
-            }}>
+            <div
+              key={s.id}
+              className="service-card"
+              onClick={(e) => {
+                // For full-home, open modal; for others navigate to their route via protected nav
+                if (s.id === "full-home") return openFullHomeModal(e);
+                navigate(s.path);
+              }}
+            >
               <div className="service-media" style={{ backgroundImage: `url(${s.img})` }} />
               <div className="service-body">
                 <h5>{s.title}</h5>
                 <p className="muted">{s.subtitle}</p>
                 <div style={{ marginTop: 8 }}>
                   {s.id === "full-home" ? (
-                    <button className="btn-smalls" onClick={(ev) => { ev.stopPropagation(); openFullHomeModal(ev); }}>Select Rooms</button>
+                    <button
+                      className="btn-smalls"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        openFullHomeModal(ev);
+                      }}
+                    >
+                      Select Rooms
+                    </button>
                   ) : (
-                    <button className="btn-smalls" onClick={(ev) => { ev.stopPropagation(); navigate(s.path); }}>Explore</button>
+                    <button
+                      className="btn-smalls"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        navigate(s.path);
+                      }}
+                    >
+                      Explore
+                    </button>
                   )}
                 </div>
               </div>
@@ -361,7 +367,7 @@ export default function InterioHome() {
         <div className="trust-grid">
           {TRUST_PERKS.map((p) => (
             <div key={p.id} className="perk-card">
-              <div className="perk-icon"><img className="icon" src={p.icon} /></div>
+              <div className="perk-icon"><img className="icon" src={p.icon} alt={p.title} /></div>
               <div>
                 <div className="perk-title">{p.title}</div>
                 <div className="perk-desc muted">{p.desc}</div>
@@ -475,7 +481,7 @@ export default function InterioHome() {
                       <div className="theme">{p.theme || p.design_theme || p.style || "—"}</div>
                       <div className="project-actions">
                         <Link to={`/projects/${p.id || p.slug || ""}`} className="btn small">View</Link>
-                        <button className="btn small" onClick={() => handleProtectedNavigation(`/projects/${p.id || p.slug || ""}`)}>Enquire</button>
+                        <button className="btn small" onClick={() => navigate(`/projects/${p.id || p.slug || ""}`)}>Enquire</button>
                       </div>
                     </div>
                   </article>
@@ -486,7 +492,7 @@ export default function InterioHome() {
         )}
       </section>
 
-      {/* --- Room selection modal --- */}
+      {/* --- Room selection modal (updated with more options) --- */}
       {showRoomModal && (
         <div className="modal-backdrop" onClick={() => setShowRoomModal(false)}>
           <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
@@ -494,37 +500,28 @@ export default function InterioHome() {
             <p className="muted">Pick a package to proceed with Full Home furnishing</p>
 
             <div className="room-options">
-              <label className={`room-opt ${selectedRoom === "1BHK" ? "active" : ""}`}>
-                <input type="radio" name="room" value="1BHK" checked={selectedRoom === "1BHK"} onChange={() => setSelectedRoom("1BHK")} />
-                <div className="room-label">
-                  <strong>1BHK</strong>
-                  <div className="muted">Living + Kitchen + Bedroom</div>
-                </div>
-              </label>
-
-              <label className={`room-opt ${selectedRoom === "2BHK" ? "active" : ""}`}>
-                <input type="radio" name="room" value="2BHK" checked={selectedRoom === "2BHK"} onChange={() => setSelectedRoom("2BHK")} />
-                <div className="room-label">
-                  <strong>2BHK</strong>
-                  <div className="muted">Living + Dining + 2 Bedrooms</div>
-                </div>
-              </label>
-
-              <label className={`room-opt ${selectedRoom === "3BHK" ? "active" : ""}`}>
-                <input type="radio" name="room" value="3BHK" checked={selectedRoom === "3BHK"} onChange={() => setSelectedRoom("3BHK")} />
-                <div className="room-label">
-                  <strong>3BHK</strong>
-                  <div className="muted">Spacious layout + multiple rooms</div>
-                </div>
-              </label>
-
-              <label className={`room-opt ${selectedRoom === "3+BHK" ? "active" : ""}`}>
-                <input type="radio" name="room" value="3+BHK" checked={selectedRoom === "3+BHK"} onChange={() => setSelectedRoom("3+BHK")} />
-                <div className="room-label">
-                  <strong>3+BHK</strong>
-                  <div className="muted">Large homes and custom solutions</div>
-                </div>
-              </label>
+              {[
+                { key: "1BHK", title: "1BHK", desc: "Living + Kitchen + Bedroom" },
+                { key: "2BHK", title: "2BHK", desc: "Living + Dining + 2 Bedrooms" },
+                { key: "3BHK", title: "3BHK", desc: "Spacious layout + multiple rooms" },
+                { key: "4BHK", title: "4BHK", desc: "Larger layouts with 4 bedrooms" },
+                { key: "4+BHK", title: "4+BHK", desc: "Large homes and custom solutions" },
+                { key: "studio", title: "Studio", desc: "Compact living with smart design" },
+              ].map((opt) => (
+                <label key={opt.key} className={`room-opt ${selectedRoom === opt.key ? "active" : ""}`}>
+                  <input
+                    type="radio"
+                    name="room"
+                    value={opt.key}
+                    checked={selectedRoom === opt.key}
+                    onChange={() => setSelectedRoom(opt.key)}
+                  />
+                  <div className="room-label">
+                    <strong>{opt.title}</strong>
+                    <div className="muted">{opt.desc}</div>
+                  </div>
+                </label>
+              ))}
             </div>
 
             <div className="modal-actions">

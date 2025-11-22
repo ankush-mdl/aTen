@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import InterioHome from "./pages/InterioHome";
 import Home from "./pages/Home";
-import Catalog from "./pages/Catalog";
+import HomeEnquiry from "./pages/HomeEnquiry.jsx";
 import Details from "./pages/Details";
 import Enquiry from "./pages/Enquiry";
 import Header from "./components/Header";
@@ -9,7 +9,7 @@ import Footer from "./components/Footer";
 import PhoneLoginModal from "./components/PhoneLogin";
 import { Toaster } from "react-hot-toast";
 import DashboardLayout from "./pages/admin/DashboardLayout";
-
+import BathroomEnquiry from "./pages/BathroomEnquiry.jsx";
 // 👉 Import new Realty pages
 import ProjectsList from "./pages/ProjectsList";
 import ProjectDetail from "./pages/ProjectDetails";
@@ -22,6 +22,9 @@ import RequireAuth from "./components/RequireAuth";
 import AddAdmin from "./pages/admin/AddAdmin.jsx";
 import TestimonialsAdmin from "./pages/admin/TestimonialsAdmin.jsx";
 import SubmitTestimonial from "./pages/SubmitTestimonial.jsx";
+import KitchenEnquiry from "./pages/KitchenEnquiry.jsx";
+import WardrobeEnquiry from "./pages/WardrobeEnquiry.jsx";
+import CustomEnquiry from "./pages/CustomEnquiries.jsx";
 
 export default function App() {
   return (
@@ -34,7 +37,11 @@ export default function App() {
           {/* --- Public routes --- */}
           <Route path="/" element={<Home />} />
           <Route path="/interio" element={<InterioHome />} />
-          <Route path="/catalog/:type" element={<Catalog />} />
+          <Route path="/home/:type" element={<HomeEnquiry />} />
+          <Route path="/kitchen" element={<KitchenEnquiry />} />
+          <Route path="/bathroom" element={<BathroomEnquiry />} />
+          <Route path="/wardrobe" element={<WardrobeEnquiry />} />
+          <Route path="/custom" element={<CustomEnquiry />} />
           <Route path="/details/:type/:themeId" element={<Details />} />
           <Route path="/testimonials" element={<SubmitTestimonial />} />
           <Route

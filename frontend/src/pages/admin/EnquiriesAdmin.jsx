@@ -447,10 +447,11 @@ async function getAuthToken({ timeoutMs = 3000, intervalMs = 150 } = {}) {
       </button>
     );
     return (
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+      <div style={{ display: "flex", flexWrap:"wrap", gap: 5, alignItems: "center" }}>
         {btn("home", "Home")}
         {btn("custom", "Custom")}
         {btn("kb", "Kitchen / Bathroom")}
+        {btn("wardrobe", "Wardrobe")}
       </div>
     );
   };
@@ -458,14 +459,14 @@ async function getAuthToken({ timeoutMs = 3000, intervalMs = 150 } = {}) {
   return (
     <div className="enquiries-admin-page">
       <div className="controls-row">
-        <div className="left-controls" style={{ display: "flex", gap: 16, alignItems: "center" }}>
+        <div className="left-controls" style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <div style={{ display: "flex", flexDirection: "column" }}>
             <label className="control-label">Viewing</label>
             <TableToggle />
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ display: "flex", marginLeft:"3rem", flexDirection: "column" }}>
+            <div style={{ display: "flex", flexDirection: "column" }}>
               <div style={{ fontSize: 12, color: "#333", fontWeight: 700, marginBottom: 6 }}>City</div>
               <Dropdown id="city-filter" value={cityFilter} onChange={(v) => { setCityFilter(v); setPage(1); }} options={[{ value: "", label: "All cities" }, ...availableCities.map((c) => ({ value: c, label: c }))]} placeholder="All cities" includeAll={false} />
             </div>
@@ -475,7 +476,7 @@ async function getAuthToken({ timeoutMs = 3000, intervalMs = 150 } = {}) {
               <Dropdown id="type-filter" value={typeFilter} onChange={(v) => { setTypeFilter(v); setPage(1); }} options={[{ value: "", label: "All types" }, ...availableTypes.map((t) => ({ value: t, label: t }))]} placeholder="All types" includeAll={false} />
             </div>
 
-            <div style={{ background: "#BFADA3", padding: "10px", marginLeft: "3rem", borderRadius: "8px" }}>
+            <div style={{ background: "#BFADA3", padding: "10px", borderRadius: "8px" }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <div style={{ display: "flex", flexDirection: "column", minWidth: 160 }}>
                   <div style={{ fontSize: 12, color: "#333", fontWeight: 700, marginBottom: 6 }}>Search by</div>
